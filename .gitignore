@@ -60,6 +60,9 @@ source-material/*
 Thumbs.db
 ehthumbs.db
 
+# Worktrees
+.worktrees/
+
 # Temporary
 *.tmp
 *.temp
