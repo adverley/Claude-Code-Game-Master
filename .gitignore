@@ -35,6 +35,9 @@ source-material/*
 *.key
 *.pem
 
+# Discord Bot Config (contains token)
+discord_bot/config.json
+
 # Claude Code Local Settings
 .claude/settings.local.json
 

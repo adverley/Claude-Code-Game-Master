@@ -46,10 +46,16 @@ rag = [
     "chromadb>=0.4.0",
 ]
 
+# Discord bot
+discord = [
+    "discord.py>=2.3.0",
+]
+
 # Full installation (all features)
 full = [
     "dm-claude[voice]",
     "dm-claude[rag]",
+    "dm-claude[discord]",
 ]
 
 # Development dependencies
