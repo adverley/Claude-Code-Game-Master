@@ -1,0 +1,39 @@
+{
+  "id": "multi-character",
+  "name": "Multi-Character Support",
+  "version": "1.0.0",
+  "author": "DM System",
+  "description": "Multi-character campaign support with party roster management",
+  "category": "character-mechanics",
+  "genre_tags": ["fantasy", "scifi", "modern", "horror", "survival"],
+  "tags": ["multi-character", "party", "multiplayer"],
+  "enabled_by_default": true,
+  "dependencies": [],
+  "incompatible_with": [],
+  "middleware": ["dm-player.sh", "dm-inventory.sh"],
+  "tools": ["dm-party.sh"],
+  "features": [
+    "Multiple playable characters per campaign",
+    "Party roster tracking in campaign overview",
+    "On-demand migration from single-character format",
+    "Character lookup by name or ID",
+    "Party management CLI (list, add, remove)"
+  ],
+  "adds_to_core": {
+    "tools": ["dm-party.sh"],
+    "commands": {
+      "dm-party.sh list": "Show all PCs in party with summary stats",
+      "dm-party.sh add <name>": "Add character to party roster",
+      "dm-party.sh remove <name>": "Remove character from party roster",
+      "dm-party.sh migrate": "Manually trigger single-to-multi migration"
+    },
+    "data_fields": {
+      "campaign-overview.json": {
+        "party": ["<character-id>"]
+      },
+      "characters/<id>.json": "Same schema as character.json"
+    }
+  },
+  "architecture": "Middleware intercepts dm-player.sh to route character commands to characters/<id>.json. Middleware intercepts dm-inventory.sh to pass --character-file. Party roster stored in campaign-overview.json party array.",
+  "replaces": []
+}
