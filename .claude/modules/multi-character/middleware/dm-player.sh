@@ -30,17 +30,14 @@ if [ ! -d "$CAMPAIGN_DIR/characters" ]; then
     exit 1
 fi
 
-# In multi-character mode, route commands to the correct character file
-case "$ACTION" in
-    show)
-        if [ -z "$1" ]; then
-            # show without name: show all party members
-            exec uv run python -c "
+# Helper: display all party members (used by show and show-all)
+_show_party() {
+    exec uv run python -c "
 import sys, json
-sys.path.insert(0, '$MODULE_DIR/lib')
+sys.path.insert(0, sys.argv[1])
 from party import get_party_characters
 from pathlib import Path
-chars = get_party_characters(Path('$CAMPAIGN_DIR'))
+chars = get_party_characters(Path(sys.argv[2]))
 if not chars:
     print('[INFO] No characters in party')
     sys.exit(0)
@@ -52,7 +49,14 @@ for c in chars:
     if conds:
         line += f' | Conditions: {\", \".join(conds)}'
     print(line)
-"
+" "$MODULE_DIR/lib" "$CAMPAIGN_DIR"
+}
+
+# In multi-character mode, route commands to the correct character file
+case "$ACTION" in
+    show)
+        if [ -z "$1" ]; then
+            _show_party
         else
             # show <name>: show specific character
             exec $PYTHON_CMD "$LIB_DIR/player_manager.py" show "$1"
@@ -60,37 +64,20 @@ for c in chars:
         ;;
 
     show-all)
-        exec uv run python -c "
-import sys, json
-sys.path.insert(0, '$MODULE_DIR/lib')
-from party import get_party_characters
-from pathlib import Path
-chars = get_party_characters(Path('$CAMPAIGN_DIR'))
-if not chars:
-    print('[INFO] No characters in party')
-    sys.exit(0)
-for c in chars:
-    hp = c.get('hp', {})
-    gold = c.get('gold', 0)
-    conds = c.get('conditions', [])
-    line = f\"{c.get('name', '?')} - {c.get('race', '?')} {c.get('class', '?')} Level {c.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {gold})\"
-    if conds:
-        line += f' | Conditions: {\", \".join(conds)}'
-    print(line)
-"
+        _show_party
         ;;
 
     save-json)
         # Route save to characters/<id>.json and add to party
         exec uv run python -c "
 import sys, json
-sys.path.insert(0, '$MODULE_DIR/lib')
+sys.path.insert(0, sys.argv[1])
 from multi_character import save_character, is_multi_character, migrate_to_multi
 from party import add_to_party
 from pathlib import Path
 
-campaign_dir = Path('$CAMPAIGN_DIR')
-char_json = ' '.join(sys.argv[1:])
+campaign_dir = Path(sys.argv[2])
+char_json = ' '.join(sys.argv[3:])
 char_data = json.loads(char_json)
 char_id = char_data.get('id') or char_data['name'].lower().replace(' ', '-').replace(\"'\", '').replace('\"', '')
 char_data['id'] = char_id
@@ -104,7 +91,7 @@ path = save_character(campaign_dir, char_data)
 add_to_party(campaign_dir, char_id)
 result = {'success': True, 'character_id': char_id, 'file_path': str(path)}
 print(json.dumps(result, indent=2, ensure_ascii=False))
-" "$@"
+" "$MODULE_DIR/lib" "$CAMPAIGN_DIR" "$@"
         ;;
 
     get|hp|xp|gold|inventory|condition|loot|level-check)
@@ -117,14 +104,14 @@ print(json.dumps(result, indent=2, ensure_ascii=False))
         # List all character IDs from characters/ directory
         exec uv run python -c "
 import sys
-sys.path.insert(0, '$MODULE_DIR/lib')
+sys.path.insert(0, sys.argv[1])
 from multi_character import list_characters
 from pathlib import Path
-chars = list_characters(Path('$CAMPAIGN_DIR'))
+chars = list_characters(Path(sys.argv[2]))
 for c in chars:
     cid = c.get('id', 'unknown')
     print(cid)
-"
+" "$MODULE_DIR/lib" "$CAMPAIGN_DIR"
         ;;
 
     *)
