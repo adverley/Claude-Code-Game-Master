@@ -15,9 +15,9 @@ from copy import deepcopy
 class InventoryManager:
     """Unified manager for character inventory, gold, HP, XP, and custom stats"""
 
-    def __init__(self, campaign_path: Path):
+    def __init__(self, campaign_path: Path, character_file: str = "character.json"):
         self.campaign_path = campaign_path
-        self.character_file = campaign_path / "character.json"
+        self.character_file = campaign_path / character_file
         self.character = self._load_character()
         self.changes_log = []
 
@@ -496,6 +496,8 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Unified Inventory Manager")
+    parser.add_argument('--character-file', default="character.json",
+                        help='Character file path relative to campaign (default: character.json)')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
     # Update command
@@ -549,7 +551,7 @@ def main():
     campaign_path = Path(f"world-state/campaigns/{campaign_name}")
 
     # Initialize manager
-    manager = InventoryManager(campaign_path)
+    manager = InventoryManager(campaign_path, character_file=args.character_file)
 
     # Execute command
     if args.command == 'show':
