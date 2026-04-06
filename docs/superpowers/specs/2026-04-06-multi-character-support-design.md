@@ -74,7 +74,8 @@ Single-character campaigns that never add a second PC continue using `character.
 .claude/modules/multi-character/
 ├── module.json
 ├── middleware/
-│   └── dm-player.sh
+│   ├── dm-player.sh
+│   └── dm-inventory.sh
 ├── lib/
 │   ├── multi_character.py
 │   └── party.py
@@ -89,7 +90,7 @@ Single-character campaigns that never add a second PC continue using `character.
   "name": "multi-character",
   "description": "Multi-character campaign support with party roster management",
   "version": "1.0.0",
-  "middleware": ["dm-player.sh"],
+  "middleware": ["dm-player.sh", "dm-inventory.sh"],
   "tools": ["dm-party.sh"]
 }
 ```
@@ -162,13 +163,26 @@ No changes needed to the Discord bot:
 
 ### Existing modules
 
-No changes needed to other modules:
+- `custom-stats/` — already takes a character name parameter, no changes needed
+- `firearms-combat/` — combat resolution already accepts character names, no changes needed
 
-- `custom-stats/` — already takes a character name parameter
-- `inventory-system/` — same, character name is passed through
-- `firearms-combat/` — combat resolution already accepts character names
+**inventory-system/ — requires a small patch:**
 
-All existing modules receive character names via the middleware layer and operate on whichever character is specified.
+`InventoryManager` at `.claude/modules/inventory-system/lib/inventory_manager.py` hardcodes `self.character_file = campaign_path / "character.json"` and bypasses `PlayerManager` entirely. This breaks when characters live in `characters/<id>.json`.
+
+**Fix:** Make `InventoryManager.__init__` accept an optional `character_file` parameter that defaults to `"character.json"` (relative to campaign path). The multi-character middleware resolves the correct path (e.g., `characters/theron-oakshade.json`) and passes it in. Single-character campaigns continue working unchanged since the default is `character.json`.
+
+```python
+# Before
+def __init__(self, campaign_path: Path):
+    self.character_file = campaign_path / "character.json"
+
+# After
+def __init__(self, campaign_path: Path, character_file: str = "character.json"):
+    self.character_file = campaign_path / character_file
+```
+
+The CLI entry point in `inventory_manager.py` also needs updating to accept an optional `--character-file` argument and pass it through to the constructor. The middleware intercepts inventory commands, resolves the character name to a file path, and appends `--character-file characters/<id>.json` before forwarding.
 
 ### show_all_players()
 
@@ -200,6 +214,11 @@ Currently loads the single `character.json`. The module middleware overrides thi
 - `dm-party.sh list` displays all party members with stats
 - Single-character campaign with no second PC: `character.json` format works unchanged
 - `dm-party.sh remove` then `dm-party.sh add` round-trips correctly
+
+**InventoryManager patch:**
+- Default `character_file="character.json"` loads from campaign root (backwards compatible)
+- Custom `character_file="characters/theron-oakshade.json"` loads from characters directory
+- CLI `--character-file` argument passes through correctly
 
 ### Edge cases
 
