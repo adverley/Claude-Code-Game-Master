@@ -5,13 +5,17 @@ from discord_bot.commands import register
 HELP_TEXT = """**D&D Discord Bot Commands:**
 
 **Gameplay:**
-`!dm <action>` -- Tell the DM what you do (triggers narrative response)
+`!dm <question>` -- Ask the DM a question (no plot advancement)
+`!process <action>` -- Tell the DM what you do (advances the story)
 `!roll <dice>` -- Roll dice (e.g. `!roll 1d20+5`, `!roll 3d6`)
 
 **Character:**
 `!inventory` -- Show your character's equipment
 `!status` -- Show your character summary (HP, level, gold)
 `!join <character>` -- Link your Discord account to a character
+
+**World:**
+`!overview` -- Show current world state (locations, NPCs, quests)
 
 **Session:**
 `!session-start` -- Start a new DM session

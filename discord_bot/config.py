@@ -7,6 +7,8 @@ from typing import Any
 REQUIRED_FIELDS = ["bot_token", "channel_id", "campaign"]
 DEFAULTS = {
     "message_buffer_size": 50,
+    "dm_player": "",   # Discord display name allowed to use !dm. Empty = anyone.
+    "model": "",       # Claude model to use. Empty = Claude Code default. E.g. "sonnet", "opus", "haiku"
 }
 
 
