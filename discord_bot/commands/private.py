@@ -3,6 +3,7 @@
 import logging
 import discord
 from discord_bot.commands import register
+from discord_bot.response_router import route_response
 
 DISCORD_MSG_LIMIT = 2000
 log = logging.getLogger("dm_bot.commands")
@@ -35,12 +36,16 @@ async def handle_private(message, args: str, ctx) -> None:
     thinking_msg = await message.channel.send("*The DM is thinking...*")
     try:
         response = await ctx.claude_bridge.send(payload)
-        await thinking_msg.delete()
+        routed = route_response(response)
 
         try:
             user = await ctx.client.fetch_user(int(user_id))
-            for i in range(0, len(response), DISCORD_MSG_LIMIT):
-                await user.send(response[i:i + DISCORD_MSG_LIMIT])
+            if routed.public:
+                for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
+                    await user.send(routed.public[i:i + DISCORD_MSG_LIMIT])
+            for _char_name, whisper_text in routed.whispers:
+                for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
+                    await user.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
             await message.channel.send(f"🤫 *The DM whispers to {character}...*")
         except discord.Forbidden:
             log.warning("Cannot DM %s (%s) — DMs disabled", discord_name, character)
@@ -49,9 +54,9 @@ async def handle_private(message, args: str, ctx) -> None:
             )
     except TimeoutError:
         log.warning("Claude timed out for !private from %s", discord_name)
-        await thinking_msg.delete()
         await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
     except RuntimeError as e:
         log.error("Claude error for !private from %s: %s", discord_name, e)
-        await thinking_msg.delete()
         await message.channel.send(f"DM error: {e}")
+    finally:
+        await thinking_msg.delete()

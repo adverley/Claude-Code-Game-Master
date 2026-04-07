@@ -9,6 +9,25 @@ DISCORD_MSG_LIMIT = 2000
 log = logging.getLogger("dm_bot.commands")
 
 
+async def _dispatch_whispers(whispers, player_map, client, channel) -> None:
+    """Send whisper DMs to players and post channel acknowledgements."""
+    for char_name, whisper_text in whispers:
+        user_id = player_map.get_user_id_by_character(char_name)
+        if user_id is None:
+            log.warning("No player mapped to character %r — skipping whisper", char_name)
+            continue
+        try:
+            user = await client.fetch_user(int(user_id))
+            for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
+                await user.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
+            await channel.send(f"🤫 *The DM whispers to {char_name}...*")
+        except discord.Forbidden:
+            log.warning("Cannot DM character %r — DMs disabled", char_name)
+            await channel.send(
+                f"{char_name}, your DMs are closed — enable them to receive private messages."
+            )
+
+
 async def _resolve_player(message, ctx):
     """Return (discord_name, character) or send an error and return None."""
     user_id = str(message.author.id)
@@ -45,36 +64,21 @@ async def handle_dm(message, args: str, ctx) -> None:
     thinking_msg = await message.channel.send("*The DM is thinking...*")
     try:
         response = await ctx.claude_bridge.send(payload)
-        await thinking_msg.delete()
         routed = route_response(response)
 
         if routed.public:
             for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
                 await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
 
-        for char_name, whisper_text in routed.whispers:
-            user_id = ctx.player_map.get_user_id_by_character(char_name)
-            if user_id is None:
-                log.warning("No player mapped to character %r — skipping whisper", char_name)
-                continue
-            try:
-                user = await ctx.client.fetch_user(int(user_id))
-                for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
-                    await user.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
-                await message.channel.send(f"🤫 *The DM whispers to {char_name}...*")
-            except discord.Forbidden:
-                log.warning("Cannot DM character %r — DMs disabled", char_name)
-                await message.channel.send(
-                    f"{char_name}, your DMs are closed — enable them to receive private messages."
-                )
+        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
     except TimeoutError:
         log.warning("Claude timed out for !dm from %s", discord_name)
-        await thinking_msg.delete()
         await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
     except RuntimeError as e:
         log.error("Claude error for !dm from %s: %s", discord_name, e)
-        await thinking_msg.delete()
         await message.channel.send(f"DM error: {e}")
+    finally:
+        await thinking_msg.delete()
 
 
 @register("process")
@@ -106,36 +110,20 @@ async def handle_process(message, args: str, ctx) -> None:
     thinking_msg = await message.channel.send("*The DM is thinking...*")
     try:
         response = await ctx.claude_bridge.send(payload)
-        await thinking_msg.delete()
         routed = route_response(response)
 
         if routed.public:
             for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
                 await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
 
-        for char_name, whisper_text in routed.whispers:
-            user_id = ctx.player_map.get_user_id_by_character(char_name)
-            if user_id is None:
-                log.warning("No player mapped to character %r — skipping whisper", char_name)
-                continue
-            try:
-                user = await ctx.client.fetch_user(int(user_id))
-                for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
-                    await user.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
-                await message.channel.send(f"🤫 *The DM whispers to {char_name}...*")
-            except discord.Forbidden:
-                log.warning("Cannot DM character %r — DMs disabled", char_name)
-                await message.channel.send(
-                    f"{char_name}, your DMs are closed — enable them to receive private messages."
-                )
+        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
     except TimeoutError:
         log.warning("Claude timed out for !process from %s", discord_name)
-        await thinking_msg.delete()
         await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
     except RuntimeError as e:
         log.error("Claude error for !process from %s: %s", discord_name, e)
-        await thinking_msg.delete()
         await message.channel.send(f"DM error: {e}")
     finally:
+        await thinking_msg.delete()
         ctx.message_buffer.mark_sent()
         log.debug("Message buffer marked sent")

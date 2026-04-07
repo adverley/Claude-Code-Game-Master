@@ -1,7 +1,7 @@
 import pytest
 import discord
 from unittest.mock import AsyncMock, MagicMock
-from discord_bot.commands.dm import handle_dm
+from discord_bot.commands.dm import handle_dm, handle_process
 
 
 class FakeMessage:
@@ -149,3 +149,39 @@ class TestDmCommandRouting:
 
         channel_calls = [c[0][0] for c in msg.channel.send.call_args_list]
         assert any("DMs are closed" in c or "enable" in c.lower() for c in channel_calls)
+
+
+@pytest.mark.asyncio
+class TestProcessCommandRouting:
+    async def test_process_private_marker_sends_dm_not_channel(self):
+        msg = FakeMessage()
+        ctx = FakeCtx()
+        ctx.player_map.get_user_id_by_character = MagicMock(return_value="111")
+        ctx.claude_bridge.send = AsyncMock(
+            return_value="The party moves on.[PRIVATE:thorin]You notice a trapdoor.[/PRIVATE]"
+        )
+
+        await handle_process(msg, "we enter the room", ctx)
+
+        # Channel should NOT contain the private text
+        channel_calls = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert not any("trapdoor" in c for c in channel_calls)
+
+        # DM user should receive the private text
+        dm_user = ctx.client.fetch_user.return_value
+        dm_calls = [c[0][0] for c in dm_user.send.call_args_list]
+        assert any("trapdoor" in c for c in dm_calls)
+
+    async def test_process_unknown_character_skips_silently(self):
+        msg = FakeMessage()
+        ctx = FakeCtx()
+        ctx.player_map.get_user_id_by_character = MagicMock(return_value=None)
+        ctx.claude_bridge.send = AsyncMock(
+            return_value="[PRIVATE:nobody]Secret.[/PRIVATE]Public text."
+        )
+
+        await handle_process(msg, "anything", ctx)
+
+        # Should not crash; public text still posted
+        channel_calls = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert any("Public text" in c for c in channel_calls)
