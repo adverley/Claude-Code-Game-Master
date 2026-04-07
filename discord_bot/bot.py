@@ -51,6 +51,7 @@ class BotContext:
     claude_bridge: ClaudeBridge
     player_map: PlayerMap
     channel_id: int
+    client: discord.Client = None
 
 
 def on_message_handler(message, ctx: BotContext) -> str:
@@ -143,6 +144,7 @@ def main():
         claude_bridge=ClaudeBridge(project_dir=str(PROJECT_DIR), model=model, claude_debug=args.claude_debug),
         player_map=PlayerMap(player_map_path),
         channel_id=int(config["channel_id"]),
+        client=client,
     )
 
     @client.event
