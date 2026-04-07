@@ -9,13 +9,12 @@ class MessageBuffer:
         self._messages: deque[dict] = deque(maxlen=max_size)
         self._sent_index: int = 0  # index into _messages marking last sent position
 
-    def add(self, discord_name: str, character_name: str, content: str, *, is_command: bool) -> None:
-        """Add a message to the buffer."""
+    def add(self, discord_name: str, character_name: str, content: str) -> None:
+        """Add a plain chat message to the buffer (commands are excluded)."""
         self._messages.append({
             "discord_name": discord_name,
             "character_name": character_name,
             "content": content,
-            "is_command": is_command,
             "timestamp": datetime.now(timezone.utc).strftime("%H:%M"),
         })
 
@@ -39,6 +38,7 @@ class MessageBuffer:
         active_player: str,
         active_character: str,
         command_text: str,
+        advance_plot: bool = True,
     ) -> str:
         """Format a list of messages into the context block sent to Claude."""
         lines = ["[Discord context since last DM response]"]
@@ -48,5 +48,10 @@ class MessageBuffer:
             )
         lines.append("")
         lines.append(f"Active player: {active_player} ({active_character})")
-        lines.append(f"Command: {command_text}")
+        if advance_plot:
+            lines.append(f"Action: {command_text}")
+            lines.append("Advance the plot based on this action. Describe consequences, move the story forward.")
+        else:
+            lines.append(f"Question: {command_text}")
+            lines.append("Answer this question as the DM. Do NOT advance the plot or describe new events.")
         return "\n".join(lines)

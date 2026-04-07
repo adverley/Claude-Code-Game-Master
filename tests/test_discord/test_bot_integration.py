@@ -55,12 +55,9 @@ class TestOnMessageHandler:
         result = on_message_handler(msg, ctx)
         assert result == "command"
 
-    def test_tracks_command_in_buffer_too(self):
+    def test_commands_not_added_to_buffer(self):
         ctx = make_ctx()
         msg = FakeDiscordMessage("!dm I search", channel_id="999")
 
         on_message_handler(msg, ctx)
-        ctx.message_buffer.add.assert_called_once()
-        # Verify is_command=True was passed
-        call_kwargs = ctx.message_buffer.add.call_args
-        assert call_kwargs.kwargs.get("is_command") is True or call_kwargs[1].get("is_command") is True
+        ctx.message_buffer.add.assert_not_called()

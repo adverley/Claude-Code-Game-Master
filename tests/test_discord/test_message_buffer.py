@@ -4,22 +4,22 @@ from discord_bot.message_buffer import MessageBuffer
 class TestMessageBuffer:
     def test_add_and_get_all(self):
         buf = MessageBuffer(max_size=5)
-        buf.add("Erik", "Thorin", "I don't trust this merchant", is_command=False)
-        buf.add("Sara", "Elara", "agreed", is_command=False)
+        buf.add("Erik", "Thorin", "I don't trust this merchant")
+        buf.add("Sara", "Elara", "agreed")
 
         messages = buf.get_all()
         assert len(messages) == 2
         assert messages[0]["discord_name"] == "Erik"
         assert messages[0]["character_name"] == "Thorin"
         assert messages[0]["content"] == "I don't trust this merchant"
-        assert messages[0]["is_command"] is False
+        assert "is_command" not in messages[0]
 
     def test_rolling_window_evicts_oldest(self):
         buf = MessageBuffer(max_size=3)
-        buf.add("A", "CharA", "msg1", is_command=False)
-        buf.add("B", "CharB", "msg2", is_command=False)
-        buf.add("C", "CharC", "msg3", is_command=False)
-        buf.add("D", "CharD", "msg4", is_command=False)
+        buf.add("A", "CharA", "msg1")
+        buf.add("B", "CharB", "msg2")
+        buf.add("C", "CharC", "msg3")
+        buf.add("D", "CharD", "msg4")
 
         messages = buf.get_all()
         assert len(messages) == 3
@@ -27,13 +27,13 @@ class TestMessageBuffer:
 
     def test_get_delta_returns_new_messages(self):
         buf = MessageBuffer(max_size=50)
-        buf.add("Erik", "Thorin", "hello", is_command=False)
-        buf.add("Sara", "Elara", "hi", is_command=False)
+        buf.add("Erik", "Thorin", "hello")
+        buf.add("Sara", "Elara", "hi")
 
         buf.mark_sent()  # mark current position
 
-        buf.add("Erik", "Thorin", "I search the room", is_command=True)
-        buf.add("Tom", "Gandalf", "me too", is_command=False)
+        buf.add("Erik", "Thorin", "I search the room")
+        buf.add("Tom", "Gandalf", "me too")
 
         delta = buf.get_delta()
         assert len(delta) == 2
@@ -41,7 +41,7 @@ class TestMessageBuffer:
 
     def test_get_delta_empty_when_nothing_new(self):
         buf = MessageBuffer(max_size=50)
-        buf.add("Erik", "Thorin", "hello", is_command=False)
+        buf.add("Erik", "Thorin", "hello")
         buf.mark_sent()
 
         delta = buf.get_delta()
@@ -49,8 +49,8 @@ class TestMessageBuffer:
 
     def test_format_delta_for_claude(self):
         buf = MessageBuffer(max_size=50)
-        buf.add("Erik", "Thorin", "let's be careful", is_command=False)
-        buf.add("Sara", "Elara", "!dm I search the room", is_command=True)
+        buf.add("Erik", "Thorin", "let's be careful")
+        buf.add("Sara", "Elara", "I agree, stay alert")
 
         delta = buf.get_delta()
         formatted = buf.format_for_claude(delta, active_player="Erik", active_character="Thorin", command_text="I search the room")
@@ -58,10 +58,10 @@ class TestMessageBuffer:
         assert "Erik (playing Thorin)" in formatted
         assert "Sara (playing Elara)" in formatted
         assert "Active player: Erik (Thorin)" in formatted
-        assert "Command: I search the room" in formatted
+        assert "Action: I search the room" in formatted
 
     def test_add_stores_timestamp(self):
         buf = MessageBuffer(max_size=5)
-        buf.add("Erik", "Thorin", "test", is_command=False)
+        buf.add("Erik", "Thorin", "test")
         msg = buf.get_all()[0]
         assert "timestamp" in msg

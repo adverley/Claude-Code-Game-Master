@@ -19,9 +19,10 @@ class FakeCtx:
         self.player_map.get_discord_name.return_value = discord_name
         self.message_buffer = MagicMock()
         self.message_buffer.get_delta.return_value = [
-            {"timestamp": "14:32", "discord_name": "Erik", "character_name": "thorin", "content": "let's go", "is_command": False}
+            {"timestamp": "14:32", "discord_name": "Erik", "character_name": "thorin", "content": "let's go"}
         ]
-        self.message_buffer.format_for_claude.return_value = "[Discord context]\nActive player: Erik (thorin)\nCommand: I search"
+        self.message_buffer.format_for_claude.return_value = "[Discord context]\nActive player: Erik (thorin)\nQuestion: I search"
+        self.config = {}
         self.claude_bridge = AsyncMock()
         self.claude_bridge.is_active = True
         self.claude_bridge.send = AsyncMock(return_value="You find a hidden door behind the bookshelf.")
