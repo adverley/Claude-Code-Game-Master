@@ -40,3 +40,23 @@ class TestRouteResponse:
     def test_returns_routedresponse_instance(self):
         result = route_response("hello")
         assert isinstance(result, RoutedResponse)
+
+    def test_content_with_leading_trailing_newlines_is_stripped(self):
+        # Claude often writes [PRIVATE:name]\ncontent\n[/PRIVATE]
+        text = "[PRIVATE:thorin]\nYou see a trapdoor.\n[/PRIVATE]"
+        result = route_response(text)
+        assert result.whispers[0][1] == "You see a trapdoor."
+        assert result.public == ""
+
+    def test_whitespace_only_public_collapses_to_empty(self):
+        text = "  \n[PRIVATE:thorin]secret.[/PRIVATE]\n  "
+        result = route_response(text)
+        assert result.public == ""
+        assert result.whispers == [("thorin", "secret.")]
+
+    def test_two_blocks_same_character_produces_two_tuples(self):
+        text = "[PRIVATE:thorin]First secret.[/PRIVATE][PRIVATE:thorin]Second secret.[/PRIVATE]"
+        result = route_response(text)
+        assert len(result.whispers) == 2
+        assert result.whispers[0] == ("thorin", "First secret.")
+        assert result.whispers[1] == ("thorin", "Second secret.")

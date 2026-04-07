@@ -22,6 +22,7 @@ def route_response(text: str) -> RoutedResponse:
 
     def _extract(match: re.Match) -> str:
         character = match.group(1).strip()
+        # Strip leading/trailing whitespace — Claude often wraps content with newlines
         content = match.group(2).strip()
         whispers.append((character, content))
         return ""
