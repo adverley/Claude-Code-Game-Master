@@ -65,3 +65,27 @@ class TestPlayerMap:
         pm = PlayerMap(path)
         players = pm.get_all()
         assert len(players) == 2
+
+    def test_get_user_id_by_character_found(self, tmp_path):
+        path = make_player_map_file(tmp_path, {
+            "players": {
+                "111": {"discord_name": "Erik", "character": "thorin"},
+                "222": {"discord_name": "Sara", "character": "elara"},
+            }
+        })
+        pm = PlayerMap(path)
+        assert pm.get_user_id_by_character("thorin") == "111"
+        assert pm.get_user_id_by_character("elara") == "222"
+
+    def test_get_user_id_by_character_case_insensitive(self, tmp_path):
+        path = make_player_map_file(tmp_path, {
+            "players": {"111": {"discord_name": "Erik", "character": "thorin"}}
+        })
+        pm = PlayerMap(path)
+        assert pm.get_user_id_by_character("THORIN") == "111"
+        assert pm.get_user_id_by_character("Thorin") == "111"
+
+    def test_get_user_id_by_character_not_found(self, tmp_path):
+        path = make_player_map_file(tmp_path, {"players": {}})
+        pm = PlayerMap(path)
+        assert pm.get_user_id_by_character("nobody") is None

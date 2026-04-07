@@ -27,6 +27,14 @@ class PlayerMap:
         player = self._data["players"].get(user_id)
         return player["discord_name"] if player else None
 
+    def get_user_id_by_character(self, character_name: str) -> Optional[str]:
+        """Reverse lookup: character name → Discord user ID. Case-insensitive."""
+        name = character_name.lower()
+        for user_id, data in self._data["players"].items():
+            if data["character"].lower() == name:
+                return user_id
+        return None
+
     def join(self, user_id: str, discord_name: str, character: str) -> None:
         """Register or update a player's character mapping."""
         self._data["players"][user_id] = {
