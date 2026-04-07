@@ -40,8 +40,9 @@ class TestPrivateCommand:
 
         ctx.client.fetch_user.assert_called_once_with(int("111"))
         dm_user = ctx.client.fetch_user.return_value
-        dm_user.send.assert_called_once()
-        dm_text = dm_user.send.call_args[0][0]
+        assert dm_user.send.called
+        # Check the first chunk contains the response
+        dm_text = dm_user.send.call_args_list[0][0][0]
         assert "amulet" in dm_text
 
     async def test_posts_whisper_ack_to_channel(self):
