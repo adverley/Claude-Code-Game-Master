@@ -78,6 +78,10 @@ class TestDmCommandRouting:
 
         await handle_dm(msg, "I open the door", ctx)
 
+        # thinking_msg is the first channel.send call (the "thinking" indicator)
+        thinking_msg = msg.channel.send.return_value
+        thinking_msg.delete.assert_called_once()
+
         calls = [c[0][0] for c in msg.channel.send.call_args_list]
         assert any("door" in c for c in calls)
 

@@ -23,34 +23,6 @@ async def _resolve_player(message, ctx):
     return discord_name, character
 
 
-async def _send_and_reply(message, payload: str, mode: str, discord_name: str):
-    """Send payload to Claude and post the response to Discord."""
-    thinking_msg = await message.channel.send("*The DM is thinking...*")
-    log.info("Sent thinking indicator; waiting for Claude [mode=%s, player=%s]", mode, discord_name)
-
-    try:
-        response = await message.ctx.claude_bridge.send(payload) if False else await _bridge_send(message, payload)
-        await thinking_msg.delete()
-        for i in range(0, len(response), DISCORD_MSG_LIMIT):
-            await message.channel.send(response[i:i + DISCORD_MSG_LIMIT])
-        return True
-    except TimeoutError:
-        log.warning("Claude timed out for !%s from %s", mode, discord_name)
-        await thinking_msg.delete()
-        await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
-        return False
-    except RuntimeError as e:
-        log.error("Claude error for !%s from %s: %s", mode, discord_name, e)
-        await thinking_msg.delete()
-        await message.channel.send(f"DM error: {e}")
-        return False
-
-
-async def _bridge_send(message, payload):
-    """Placeholder -- replaced at call site."""
-    raise NotImplementedError
-
-
 @register("dm")
 async def handle_dm(message, args: str, ctx) -> None:
     """Handle !dm <text> -- ask the DM a question without advancing the plot."""
