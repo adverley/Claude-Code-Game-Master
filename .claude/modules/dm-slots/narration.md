@@ -23,6 +23,9 @@ Rules:
 - Keep actions to 1-2 words
 - Include obvious AND creative options
 
+### Private Information (Discord Multi-Player)
+If something happens that only one character would see, hear, or know, wrap that part in `[PRIVATE:character_name]...[/PRIVATE]`. It will be sent as a private Discord DM to that player.
+
 ### Quick Templates
 
 **Tavern/Inn:**

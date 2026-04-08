@@ -42,7 +42,8 @@ class TestClaudeBridge:
             "222": {"discord_name": "Sara", "character": "elara"},
         }
         prompt = bridge._build_init_prompt("lost-mines", players)
-        assert "Discord multi-player" in prompt
+        assert "lost-mines" in prompt
         assert "Erik" in prompt
         assert "thorin" in prompt
-        assert "lost-mines" in prompt
+        assert ".claude/commands/dm.md" in prompt
+        assert "CONTINUE CAMPAIGN" in prompt

@@ -59,20 +59,18 @@ class ClaudeBridge:
         player_block = "\n".join(player_lines) if player_lines else "- No players registered yet"
 
         return (
-            f"You are the DM for a Discord multi-player D&D session.\n"
+            f"This is a multi-player D&D session running via Discord.\n"
             f"Campaign: {campaign}\n\n"
             f"Players:\n{player_block}\n\n"
-            f"Each player has their own character file in characters/.\n"
-            f"When a player acts, use their character for rolls and state changes.\n"
-            f"You can update any character as needed (e.g. area damage hits everyone).\n\n"
-            f"To send a private message to a specific player, wrap it in "
-            f"[PRIVATE:character_name]...[/PRIVATE]. "
-            f"Everything outside these markers is posted publicly to the channel.\n\n"
-            f"Start by running:\n"
-            f"  bash tools/dm-session.sh start\n"
-            f"  bash tools/dm-session.sh context\n\n"
-            f"Then narrate the opening scene based on where the campaign left off.\n"
-            f"Respond in character as the DM. Be vivid and engaging."
+            f"If something happens that only one character would see, hear, or know, "
+            f"wrap that part in [PRIVATE:character_name]...[/PRIVATE]. "
+            f"It will be sent as a private Discord DM to that player.\n\n"
+            f"Use the Read tool to read `.claude/commands/dm.md` and follow the "
+            f"CONTINUE CAMPAIGN section.\n"
+            f"Skip STEP 0 (campaign selection) — the campaign is `{campaign}`, "
+            f"already active.\n"
+            f"If the skill routes to `.claude/commands/dm-continue.md`, "
+            f"read and follow that instead."
         )
 
     async def send(self, prompt: str, timeout: float = 120.0) -> str:
