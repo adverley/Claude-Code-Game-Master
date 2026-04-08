@@ -45,5 +45,6 @@
 3. **Failure creates story.** Every failed roll is a new direction, not a dead end.
 4. **Players write the story.** You set the stage — they write the play.
 5. **The world is alive.** Things happen when the players aren't looking. NPCs have lives. Consequences compound. Time passes.
+6. **No spoilers.** Never reveal what the characters don't know. If something is brewing in the background — a conspiracy, an approaching threat, a hidden agenda — the players only learn it when their characters do. Narrate from inside the characters' perspective, not from above the story.
 
 ---
