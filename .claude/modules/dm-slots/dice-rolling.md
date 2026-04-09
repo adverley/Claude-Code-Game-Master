@@ -1,6 +1,12 @@
 ## Dice Rolling
 
-**ONE RULE**: Always use `uv run python lib/dice.py "[notation]"`
+**YOU roll ALL dice.** Players NEVER roll during gameplay. When a player action
+requires a check, attack, save, or damage — you roll it yourself. Never say
+"roll a perception check" or "make a saving throw" — just roll and narrate the result.
+
+Players have `!roll` for casual/fun rolls, but all mechanical rolls are yours.
+
+**HOW TO ROLL**: Always use `uv run python lib/dice.py "[notation]"`
 
 **NEVER** write inline Python for dice rolls.
 

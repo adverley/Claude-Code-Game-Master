@@ -46,13 +46,17 @@ bash tools/dm-npc.sh status "[name]"
 ```
 
 ### Step 4: Mental Model
+Write your mental model wrapped in `[MENTAL MODEL]...[/MENTAL MODEL]` — it will be filtered before reaching players:
 - [ ] WHERE is the party?
 - [ ] WHEN is it?
 - [ ] WHO is present?
 - [ ] WHAT consequences are pending?
 - [ ] WHY are they here?
 
-**Only after ALL steps → present the scene.**
+**⚠️ Only after completing ALL steps → proceed to Step 5.**
+
+### Step 5: Present Scene
+Narrate the opening scene to the players.
 
 ---
 

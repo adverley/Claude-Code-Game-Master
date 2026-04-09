@@ -1,9 +1,14 @@
 """!session-start and !session-end commands."""
 
 import asyncio
+import logging
 import shlex
 
 from discord_bot.commands import register
+from discord_bot.commands.dm import _dispatch_whispers
+from discord_bot.response_router import route_response
+
+log = logging.getLogger("dm_bot.commands")
 
 DISCORD_MSG_LIMIT = 2000
 
@@ -23,8 +28,13 @@ async def handle_session_start(message, args: str, ctx) -> None:
 
     try:
         response = await ctx.claude_bridge.send_init(campaign, players)
-        for i in range(0, len(response), DISCORD_MSG_LIMIT):
-            await message.channel.send(response[i:i + DISCORD_MSG_LIMIT])
+        routed = route_response(response)
+
+        if routed.public:
+            for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
+                await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
+
+        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
     except (TimeoutError, RuntimeError) as e:
         ctx.claude_bridge.end_session()
         await message.channel.send(f"Failed to start session: {e}")

@@ -215,14 +215,18 @@ For complex party members, also consider:
 - Source material context (from RAG) gives you their canonical voice
 
 #### Step 4: Build Mental Model
-Before narrating, confirm you know:
+Write your mental model wrapped in `[MENTAL MODEL]...[/MENTAL MODEL]` — it will be filtered before reaching players:
 - [ ] WHERE is the party? (verified location)
 - [ ] WHEN is it? (time of day)
 - [ ] WHO is present? (personality, voice, recent events)
 - [ ] WHAT consequences are pending?
 - [ ] WHY are they here? (last session's ending context)
 
-**⚠️ Only after completing ALL steps → Present the scene.**
+**⚠️ Only after completing ALL steps → proceed to Step 5.**
+
+#### Step 5: Present Scene
+
+Narrate the opening scene to the players.
 
 ---
 
@@ -238,12 +242,6 @@ When `dm-session.sh start` or `move` runs, it queries source material for the cu
 - Capture the author's writing style and atmosphere
 
 **CRITICAL: Do NOT paste raw passages into narrative.** Synthesize them into natural scene descriptions.
-
----
-
-### Present Scene
-
-Use the standard scene template from CLAUDE.md.
 
 ---
 

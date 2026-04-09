@@ -1,12 +1,49 @@
 """!dm and !process commands -- send prompts to Claude via the bridge."""
 
 import logging
+import random
 import discord
 from discord_bot.commands import register
 from discord_bot.response_router import route_response
 
 DISCORD_MSG_LIMIT = 2000
+PRIVATE_WHISPER_CHANCE = 0.1  # 20% chance to inject a private whisper prompt
 log = logging.getLogger("dm_bot.commands")
+
+
+def _maybe_inject_private_prompt(payload: str, player_map, *, exclude_character: str = "") -> str:
+    """With random probability, append an instruction for Claude to whisper to a random player.
+
+    Picks a character at random (excluding the active player to keep it
+    interesting) and asks Claude to add a [PRIVATE:name] block with something
+    only that character would notice — a sensory detail, a memory, a hunch.
+    """
+    if random.random() > PRIVATE_WHISPER_CHANCE:
+        return payload
+
+    all_players = player_map.get_all()
+    if not all_players:
+        return payload
+
+    candidates = [
+        data["character"] for data in all_players.values()
+        if data["character"] != exclude_character
+    ]
+    # Fall back to full list if only one player
+    if not candidates:
+        candidates = [data["character"] for data in all_players.values()]
+
+    target = random.choice(candidates)
+    log.info("Injecting private whisper prompt for %r", target)
+
+    payload += (
+        f"\n\n[SYSTEM INSTRUCTION — private aside]"
+        f"\nSomewhere in your response, include a [PRIVATE:{target}]...[/PRIVATE] block "
+        f"with a short personal detail only {target} would notice — "
+        f"a gut feeling, a half-remembered scent, a flicker in the shadows, "
+        f"or something tied to their backstory. Keep it brief and atmospheric (1-3 sentences)."
+    )
+    return payload
 
 
 async def _dispatch_whispers(whispers, player_map, client, channel) -> None:
@@ -106,6 +143,7 @@ async def handle_process(message, args: str, ctx) -> None:
         advance_plot=True,
     )
     log.debug("Payload built (%d chars)", len(payload))
+    payload = _maybe_inject_private_prompt(payload, ctx.player_map, exclude_character=character)
 
     thinking_msg = await message.channel.send("*The DM is thinking...*")
     try:

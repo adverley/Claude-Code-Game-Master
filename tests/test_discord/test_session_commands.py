@@ -19,11 +19,16 @@ class FakeCtx:
         self.claude_bridge.send_init = AsyncMock(return_value="Welcome adventurers! You stand at the entrance of a dark cave.")
         self.claude_bridge.send = AsyncMock(return_value="Session ended. The party rests for the night.")
         self.claude_bridge.end_session = MagicMock()
+        self.claude_bridge._project_dir = "/fake/path"
         self.player_map = MagicMock()
         self.player_map.get_all.return_value = {
             "111": {"discord_name": "Erik", "character": "thorin"}
         }
         self.config = {"campaign": "test-campaign"}
+        mock_dm_user = AsyncMock()
+        mock_dm_user.send = AsyncMock()
+        self.client = AsyncMock()
+        self.client.fetch_user = AsyncMock(return_value=mock_dm_user)
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import pytest
 import discord
-from unittest.mock import AsyncMock, MagicMock
-from discord_bot.commands.dm import handle_dm, handle_process
+from unittest.mock import AsyncMock, MagicMock, patch
+from discord_bot.commands.dm import handle_dm, handle_process, _maybe_inject_private_prompt
 
 
 class FakeMessage:
@@ -19,6 +19,12 @@ class FakeCtx:
         self.player_map.get_character.return_value = character
         self.player_map.get_discord_name.return_value = discord_name
         self.player_map.get_user_id_by_character = MagicMock(return_value=None)
+        # _maybe_inject_private_prompt calls get_all(); provide a real dict
+        # so it can filter/sample without crashing on MagicMock iteration.
+        self.player_map.get_all.return_value = (
+            {"111": {"discord_name": discord_name, "character": character}}
+            if character else {}
+        )
         self.message_buffer = MagicMock()
         self.message_buffer.get_delta.return_value = [
             {"timestamp": "14:32", "discord_name": "Erik", "character_name": "thorin", "content": "let's go"}
@@ -172,6 +178,75 @@ class TestProcessCommandRouting:
         dm_calls = [c[0][0] for c in dm_user.send.call_args_list]
         assert any("trapdoor" in c for c in dm_calls)
 
+    async def test_process_multiblock_narration_with_private_whisper(self):
+        """Realistic !process response: public narration with an embedded
+        multi-paragraph [PRIVATE:Aldric Ironfeld] whisper block separated
+        by horizontal rules."""
+        msg = FakeMessage()
+        ctx = FakeCtx(character="Aldric Ironfeld", discord_name="AndyV")
+        ctx.player_map.get_user_id_by_character = MagicMock(return_value="111")
+        ctx.claude_bridge.send = AsyncMock(return_value=(
+            "The hall is quiet save for the creak of old timber and the "
+            "distant sounds of the village stirring below.\n\n"
+            "Tybalt is already at the map, muttering to himself about the "
+            "tunnel\u2019s apparent depth and the likely geological composition "
+            "of the bedrock. Wren sits backwards in one of the Elder\u2019s "
+            "chairs, strumming a single absent chord on her lute, over and "
+            "over. Daveth stands near the door, still and patient, hand "
+            "resting on his holy symbol.\n\n"
+            "---\n\n"
+            "[PRIVATE:Aldric Ironfeld]\n\n"
+            "You were not idle last night.\n\n"
+            "You\u2019ve served under enough commanders to know how they hold "
+            "a lie \u2014 not a brazen one, but the kind where they give you "
+            "what you need to go, and nothing more. Alderman Cora moved "
+            "like that. Deliberate. Measured. Her hands had been steady "
+            "when she unrolled the map, but she\u2019d known exactly where to "
+            "look before the parchment was halfway open. She\u2019d been to "
+            "that page before. Many times.\n\n"
+            "And she left before anyone could ask about the warning. "
+            "*Do not extinguish your lights.* She\u2019d seen that line. She "
+            "knows what it means. She chose silence.\n\n"
+            "There was something else. When she mentioned the third "
+            "landing, her jaw tightened \u2014 just for a moment, the way a "
+            "soldier\u2019s does when they name a place where someone didn\u2019t "
+            "come back. Not grief. Not fear. The older thing. Guilt "
+            "dressed up as duty.\n\n"
+            "Cora has sent people down before. Or she\u2019s been down "
+            "herself. Either way: whatever\u2019s on the other side of that "
+            "warning, she already knows the shape of it.\n\n"
+            "She trusts you enough to point the spear. She doesn\u2019t trust "
+            "you enough to tell you what you\u2019re hitting.\n\n"
+            "Whether that changes what you do next is up to you.\n\n"
+            "[/PRIVATE:Aldric Ironfeld]\n\n"
+            "---\n\n"
+            "The map lies on the table. The morning is burning off fast.\n\n"
+            "**What do you do?**"
+        ))
+
+        await handle_process(msg, "", ctx)
+
+        channel_calls = [c[0][0] for c in msg.channel.send.call_args_list]
+        channel_text = "\n".join(channel_calls)
+
+        # Public narration reaches the channel
+        assert "creak of old timber" in channel_text
+        assert "What do you do?" in channel_text
+
+        # Private content stays out of the channel
+        assert "not idle last night" not in channel_text
+        assert "point the spear" not in channel_text
+
+        # Whisper dispatched as DM to the mapped player
+        dm_user = ctx.client.fetch_user.return_value
+        dm_calls = [c[0][0] for c in dm_user.send.call_args_list]
+        dm_text = "\n".join(dm_calls)
+        assert "not idle last night" in dm_text
+        assert "point the spear" in dm_text
+
+        # Channel acknowledgement posted
+        assert any("\U0001f92b" in c and "Aldric Ironfeld" in c for c in channel_calls)
+
     async def test_process_unknown_character_skips_silently(self):
         msg = FakeMessage()
         ctx = FakeCtx()
@@ -185,3 +260,69 @@ class TestProcessCommandRouting:
         # Should not crash; public text still posted
         channel_calls = [c[0][0] for c in msg.channel.send.call_args_list]
         assert any("Public text" in c for c in channel_calls)
+
+
+class TestMaybeInjectPrivatePrompt:
+    def _make_player_map(self, players: dict[str, str]):
+        """Build a mock player_map with get_all() returning the given {id: character} map."""
+        pm = MagicMock()
+        pm.get_all.return_value = {
+            uid: {"discord_name": f"Player{uid}", "character": char}
+            for uid, char in players.items()
+        }
+        return pm
+
+    @patch("discord_bot.commands.dm.random")
+    def test_injects_when_roll_succeeds(self, mock_random):
+        mock_random.random.return_value = 0.0  # always triggers (< 0.2)
+        mock_random.choice.side_effect = lambda x: x[0]
+
+        pm = self._make_player_map({"1": "Thorin", "2": "Elara"})
+        result = _maybe_inject_private_prompt("base payload", pm, exclude_character="Thorin")
+
+        assert "[PRIVATE:" in result
+        # Should pick from candidates excluding active player
+        assert "Elara" in result
+        assert "base payload" in result
+
+    @patch("discord_bot.commands.dm.random")
+    def test_skips_when_roll_fails(self, mock_random):
+        mock_random.random.return_value = 0.99  # does not trigger (> 0.2)
+
+        pm = self._make_player_map({"1": "Thorin"})
+        result = _maybe_inject_private_prompt("base payload", pm)
+
+        assert result == "base payload"
+
+    @patch("discord_bot.commands.dm.random")
+    def test_skips_when_no_players(self, mock_random):
+        mock_random.random.return_value = 0.0
+
+        pm = self._make_player_map({})
+        result = _maybe_inject_private_prompt("base payload", pm)
+
+        assert result == "base payload"
+
+    @patch("discord_bot.commands.dm.random")
+    def test_falls_back_to_active_player_when_only_one(self, mock_random):
+        mock_random.random.return_value = 0.0
+        mock_random.choice.side_effect = lambda x: x[0]
+
+        pm = self._make_player_map({"1": "Thorin"})
+        result = _maybe_inject_private_prompt("base payload", pm, exclude_character="Thorin")
+
+        # Only one player — should fall back to them
+        assert "[PRIVATE:Thorin]" in result
+
+    @patch("discord_bot.commands.dm.random")
+    def test_excludes_active_character(self, mock_random):
+        mock_random.random.return_value = 0.0
+        picked = []
+        mock_random.choice.side_effect = lambda x: (picked.extend(x), x[0])[1]
+
+        pm = self._make_player_map({"1": "Thorin", "2": "Elara", "3": "Gandalf"})
+        _maybe_inject_private_prompt("payload", pm, exclude_character="Thorin")
+
+        # Thorin should not be in the candidates list
+        assert "Thorin" not in picked
+

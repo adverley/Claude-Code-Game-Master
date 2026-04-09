@@ -1,9 +1,10 @@
-"""Parse [PRIVATE:name]...[/PRIVATE] markers from Claude responses."""
+"""Parse [PRIVATE:name]...[/PRIVATE] and [MENTAL MODEL]...[/MENTAL MODEL] markers from Claude responses."""
 
 import re
 from dataclasses import dataclass, field
 
-_PRIVATE_RE = re.compile(r'\[PRIVATE:([^\]]+)\](.*?)\[/PRIVATE\]', re.DOTALL)
+_PRIVATE_RE = re.compile(r'\[PRIVATE:([^\]]+)\](.*?)\[/PRIVATE(?::[^\]]+)?\]', re.DOTALL)
+_MENTAL_MODEL_RE = re.compile(r'\[MENTAL MODEL\](.*?)\[/MENTAL MODEL\]', re.DOTALL)
 
 
 @dataclass
@@ -27,5 +28,6 @@ def route_response(text: str) -> RoutedResponse:
         whispers.append((character, content))
         return ""
 
+    text = _MENTAL_MODEL_RE.sub("", text)
     public = _PRIVATE_RE.sub(_extract, text).strip()
     return RoutedResponse(public=public, whispers=whispers)

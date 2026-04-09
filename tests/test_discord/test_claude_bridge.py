@@ -47,3 +47,4 @@ class TestClaudeBridge:
         assert "thorin" in prompt
         assert ".claude/commands/dm.md" in prompt
         assert "CONTINUE CAMPAIGN" in prompt
+        assert "YOU roll ALL dice" in prompt
