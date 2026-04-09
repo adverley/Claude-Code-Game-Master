@@ -12,10 +12,13 @@ _module_enabled() {
     local module_id="$1"
     local enabled
     enabled=$(uv run python -c "
+from pathlib import Path
 import sys
-sys.path.insert(0, '$PROJECT_ROOT/.claude/modules')
+# Resolve project root from this script's known location
+modules_dir = Path('$(cygpath -w "$PROJECT_ROOT/.claude/modules" 2>/dev/null || echo "$PROJECT_ROOT/.claude/modules")')
+sys.path.insert(0, str(modules_dir))
 from module_loader import ModuleLoader
-loader = ModuleLoader()
+loader = ModuleLoader(modules_dir.parent.parent)
 print('1' if loader.is_module_enabled('$module_id') else '0')
 " 2>/dev/null)
     [ "$enabled" = "1" ]

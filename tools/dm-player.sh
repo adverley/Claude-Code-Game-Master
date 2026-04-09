@@ -7,7 +7,10 @@ source "$(dirname "$0")/common.sh"
 
 require_active_campaign
 
+# Dispatch to module middleware (e.g. multi-character)
+source "$PROJECT_ROOT/.claude/modules/infrastructure/common-advanced.sh" 2>/dev/null
 ACTION=$1
+dispatch_middleware "dm-player.sh" "$@" && exit $?
 shift
 
 case "$ACTION" in
