@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from discord_bot.commands import parse_command
 from discord_bot.response_router import route_response
 
 log = logging.getLogger("dm_bot.private_chat")
@@ -74,13 +75,13 @@ class PrivateChatManager:
                 f"The player has initiated a private conversation with you.\n"
                 f"Rules: No spoilers. No changes outside their character. Do not advance\n"
                 f"the main plot. The player may propose a secret action — discuss it with\n"
-                f"them privately. When the conversation ends, you will be asked to provide\n"
-                f"a [PUBLIC] summary of any observable outcomes.\n\n"
+                f"them privately. Keep this conversation SHORT!\n "
                 f"{character} says: {message_content}\n"
                 f"[/PRIVATE CONVERSATION]"
             )
         return (
-            f"[PRIVATE CONVERSATION with {character} continues]\n"
+            f"[PRIVATE CONVERSATION with {character} continues but try to wrap it up.!]\n"
+            f"do NOT advance the story plot or introduce new events. Focus on resolving the player's proposed action or question.\n"
             f"{character} says: {message_content}\n"
             f"[/PRIVATE CONVERSATION]"
         )
@@ -90,9 +91,7 @@ class PrivateChatManager:
             f"[PRIVATE CONVERSATION with {character} — ENDING]\n"
             f"The player is ending the private conversation. Wrap up and include a\n"
             f"[PUBLIC]...[/PUBLIC] block with anything the other players would observe\n"
-            f"or notice as a result. If nothing observable happened, the [PUBLIC] block\n"
-            f"can be empty or omitted. Frame the [PUBLIC] content however makes\n"
-            f"narrative sense — you decide whether to attribute it.\n"
+            f"or notice as a result.\n"
             f"[/PRIVATE CONVERSATION]"
         )
 
@@ -126,6 +125,8 @@ class PrivateChatManager:
 
         character = ctx.player_map.get_character(user_id)
         if character is None:
+            log.info("DM from unregistered user %s (user_id=%s): rejected",
+                     message.author.display_name, user_id)
             await message.channel.send(
                 "I don't recognize you. Use `!join <character_name>` in the game channel first."
             )
@@ -135,16 +136,28 @@ class PrivateChatManager:
 
         if content.lower() == "!done":
             if not self.is_active(user_id):
+                log.info("!done from %s (%s): no active private chat", discord_name, character)
                 await message.channel.send("You don't have an active private conversation.")
                 return
+            log.info("!done from %s (%s): ending private conversation", discord_name, character)
             await self._handle_done(message, ctx, user_id, character, discord_name)
             return
 
+        if parse_command(content) is not None:
+            await message.channel.send(
+                "Commands don't work in private conversations. "
+                "Use the game channel for commands, or type `!done` to end this conversation."
+            )
+            return
+
         if not ctx.claude_bridge.is_active:
+            log.info("DM (lite-mode) from %s (%s): %r", discord_name, character, content[:80])
             await self._handle_lite(message, ctx, user_id, character, discord_name, content)
             return
 
         is_first = not self.is_active(user_id)
+        log.info("DM from %s (%s): %s message, %r",
+                 discord_name, character, "first" if is_first else "follow-up", content[:80])
         if is_first:
             self.start_chat(user_id, character=character, discord_name=discord_name)
             if ctx.main_channel:
@@ -178,7 +191,7 @@ class PrivateChatManager:
         except TimeoutError:
             await message.channel.send("The DM took too long to respond. Try sending your message again.")
         except RuntimeError as e:
-            log.error("Claude error in private chat for %s: %s", character, e)
+            log.error("Claude error in private chat for %s (%s): %s", discord_name, character, e)
             await message.channel.send(f"DM error: {e}")
 
     async def _handle_done(self, message, ctx, user_id: str,
@@ -206,7 +219,7 @@ class PrivateChatManager:
             await message.channel.send("The DM took too long to respond. Try `!done` again.")
             return
         except RuntimeError as e:
-            log.error("Claude error on !done for %s: %s", character, e)
+            log.error("Claude error on !done for %s (%s): %s", discord_name, character, e)
             await message.channel.send(f"DM error: {e}")
             return
 
@@ -236,5 +249,5 @@ class PrivateChatManager:
         except TimeoutError:
             await message.channel.send("The DM took too long to respond. Try again.")
         except RuntimeError as e:
-            log.error("Claude lite-mode error for %s: %s", character, e)
+            log.error("Claude lite-mode error for %s (%s): %s", discord_name, character, e)
             await message.channel.send(f"DM error: {e}")

@@ -23,6 +23,7 @@ class FakeCtx:
         self.player_map.get_character.return_value = character
         self.player_map.get_discord_name.return_value = discord_name
         self.config = {"campaign": "test-campaign"}
+        self.campaign_dir = None
 
 
 @pytest.mark.asyncio
@@ -79,6 +80,88 @@ class TestJoinCommand:
         msg.channel.send.assert_called_once()
         sent = msg.channel.send.call_args[0][0]
         assert "!join" in sent
+
+
+@pytest.mark.asyncio
+class TestJoinCharacterLock:
+    async def test_join_rejects_switch_when_alive(self, tmp_path):
+        """Player with a living character cannot switch to another."""
+        # Create character file with no "dead" condition
+        chars_dir = tmp_path / "characters"
+        chars_dir.mkdir()
+        import json
+        (chars_dir / "thorin.json").write_text(json.dumps({
+            "id": "thorin", "name": "Thorin", "conditions": []
+        }))
+
+        msg = FakeMessage(user_id="111", display_name="Erik")
+        ctx = FakeCtx(character="Thorin")
+        ctx.campaign_dir = tmp_path
+        ctx.player_map.join = MagicMock()
+
+        await handle_join(msg, "gandalf", ctx)
+
+        ctx.player_map.join.assert_not_called()
+        sent = msg.channel.send.call_args[0][0]
+        assert "already playing" in sent.lower()
+
+    async def test_join_allows_switch_when_dead(self, tmp_path):
+        """Player whose character is dead can switch."""
+        chars_dir = tmp_path / "characters"
+        chars_dir.mkdir()
+        import json
+        (chars_dir / "thorin.json").write_text(json.dumps({
+            "id": "thorin", "name": "Thorin", "conditions": ["dead"]
+        }))
+
+        msg = FakeMessage(user_id="111", display_name="Erik")
+        ctx = FakeCtx(character="Thorin")
+        ctx.campaign_dir = tmp_path
+        ctx.player_map.join = MagicMock()
+
+        await handle_join(msg, "gandalf", ctx)
+
+        ctx.player_map.join.assert_called_once_with("111", "Erik", "gandalf")
+
+    async def test_join_allows_same_character_rejoin(self, tmp_path):
+        """Re-joining as the same character is always allowed."""
+        chars_dir = tmp_path / "characters"
+        chars_dir.mkdir()
+        import json
+        (chars_dir / "thorin.json").write_text(json.dumps({
+            "id": "thorin", "name": "Thorin", "conditions": []
+        }))
+
+        msg = FakeMessage(user_id="111", display_name="Erik")
+        ctx = FakeCtx(character="Thorin")
+        ctx.campaign_dir = tmp_path
+        ctx.player_map.join = MagicMock()
+
+        await handle_join(msg, "thorin", ctx)
+
+        ctx.player_map.join.assert_called_once_with("111", "Erik", "thorin")
+
+    async def test_join_allows_first_join(self):
+        """First-time join (no existing character) always works."""
+        msg = FakeMessage(user_id="111", display_name="Erik")
+        ctx = FakeCtx(character=None)
+        ctx.player_map.get_character.return_value = None
+        ctx.player_map.join = MagicMock()
+
+        await handle_join(msg, "thorin", ctx)
+
+        ctx.player_map.join.assert_called_once_with("111", "Erik", "thorin")
+
+    async def test_join_allows_switch_when_file_missing(self):
+        """If character file doesn't exist, allow switch (prevents typo lockout)."""
+        msg = FakeMessage(user_id="111", display_name="Erik")
+        ctx = FakeCtx(character="typo-name")
+        ctx.campaign_dir = Path("/nonexistent/campaign")
+        ctx.player_map.join = MagicMock()
+
+        await handle_join(msg, "gandalf", ctx)
+
+        ctx.player_map.join.assert_called_once_with("111", "Erik", "gandalf")
 
 
 @pytest.mark.asyncio

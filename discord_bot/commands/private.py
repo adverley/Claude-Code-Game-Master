@@ -9,6 +9,12 @@ DISCORD_MSG_LIMIT = 2000
 log = logging.getLogger("dm_bot.commands")
 
 
+@register("done")
+async def handle_done(message, args: str, ctx) -> None:
+    """Reject !done in public channel — it only works in DM private conversations."""
+    await message.channel.send("`!done` only works in a private DM conversation with the bot.")
+
+
 @register("private")
 async def handle_private(message, args: str, ctx) -> None:
     """Handle !private <text> -- Claude responds privately via DM."""

@@ -24,20 +24,38 @@ log = logging.getLogger("dm_bot")
 
 def setup_logging(level: str = "INFO") -> None:
     """Configure logging. Level can be DEBUG, INFO, or WARNING."""
+    from logging.handlers import RotatingFileHandler
+
     numeric = getattr(logging, level.upper(), logging.INFO)
 
-    fmt = logging.Formatter(
+    console_fmt = logging.Formatter(
         fmt="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(fmt)
+    file_fmt = logging.Formatter(
+        fmt="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(console_fmt)
+
+    log_dir = PROJECT_DIR / "logs"
+    log_dir.mkdir(exist_ok=True)
+    file_handler = RotatingFileHandler(
+        log_dir / "dm_bot.log",
+        maxBytes=5 * 1024 * 1024,  # 5 MB
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(file_fmt)
 
     # Root logger for our code
     root = logging.getLogger("dm_bot")
     root.setLevel(numeric)
-    root.addHandler(handler)
+    root.addHandler(console_handler)
+    root.addHandler(file_handler)
 
     # discord.py logs at INFO by default — suppress to WARNING unless DEBUG
     discord_level = logging.DEBUG if numeric == logging.DEBUG else logging.WARNING
@@ -52,6 +70,7 @@ class BotContext:
     claude_bridge: ClaudeBridge
     player_map: PlayerMap
     channel_id: int
+    campaign_dir: Path = None
     client: discord.Client = None
     main_channel: discord.TextChannel = None
     private_chat_manager: PrivateChatManager = None
@@ -147,6 +166,7 @@ def main():
         claude_bridge=ClaudeBridge(project_dir=str(PROJECT_DIR), model=model, claude_debug=args.claude_debug),
         player_map=PlayerMap(player_map_path),
         channel_id=int(config["channel_id"]),
+        campaign_dir=campaign_dir,
         client=client,
         private_chat_manager=PrivateChatManager(),
     )

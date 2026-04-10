@@ -27,66 +27,87 @@ async def _run_session_cmd(ctx, *args, timeout: float = 30.0):
 @register("save")
 async def handle_save(message, args: str, ctx) -> None:
     """Handle !save <name> -- create a named save point of the current world state."""
+    discord_name = message.author.display_name
+    user_id = str(message.author.id)
+    character = ctx.player_map.get_character(user_id) or "unregistered"
     name = args.strip()
+
     if not name:
+        log.info("!save from %s (%s): empty name", discord_name, character)
         await message.channel.send("Usage: `!save <name>` — e.g. `!save before-boss-fight`")
         return
 
     if not ctx.claude_bridge.is_active:
+        log.info("!save from %s (%s): no active session", discord_name, character)
         await message.channel.send("No active session. Use `!session-start` first.")
         return
 
+    log.info("!save from %s (%s): saving as %r", discord_name, character, name)
     await message.channel.send(f"*Saving world state as **{name}**...*")
 
     try:
         rc, stdout, stderr = await _run_session_cmd(ctx, "save", shlex.quote(name))
         if rc == 0:
+            log.info("!save from %s (%s): saved %r successfully", discord_name, character, name)
             await message.channel.send(f"World state saved as **{name}**.")
         else:
             error = stderr or stdout
-            log.error("Save failed (rc=%d): %s", rc, error)
+            log.error("!save from %s (%s): failed (rc=%d): %s", discord_name, character, rc, error)
             await message.channel.send(f"Save failed: {error}")
     except asyncio.TimeoutError:
-        log.warning("Save timed out for %s", name)
+        log.warning("!save from %s (%s): timed out for %r", discord_name, character, name)
         await message.channel.send("Save timed out. Try again.")
     except Exception as e:
-        log.error("Save error: %s", e)
+        log.error("!save from %s (%s): error: %s", discord_name, character, e)
         await message.channel.send(f"Save error: {e}")
 
 
 @register("restore")
 async def handle_restore(message, args: str, ctx) -> None:
     """Handle !restore <save-name> -- restore world state from a save point."""
+    discord_name = message.author.display_name
+    user_id = str(message.author.id)
+    character = ctx.player_map.get_character(user_id) or "unregistered"
     name = args.strip()
+
     if not name:
+        log.info("!restore from %s (%s): empty name", discord_name, character)
         await message.channel.send("Usage: `!restore <save-name>` — e.g. `!restore before-boss-fight`")
         return
 
     if not ctx.claude_bridge.is_active:
+        log.info("!restore from %s (%s): no active session", discord_name, character)
         await message.channel.send("No active session. Use `!session-start` first.")
         return
 
+    log.info("!restore from %s (%s): restoring from %r", discord_name, character, name)
     await message.channel.send(f"*Restoring world state from **{name}**...*")
 
     try:
         rc, stdout, stderr = await _run_session_cmd(ctx, "restore", shlex.quote(name))
         if rc == 0:
+            log.info("!restore from %s (%s): restored %r successfully", discord_name, character, name)
             await message.channel.send(f"World state restored from **{name}**.")
         else:
             error = stderr or stdout
-            log.error("Restore failed (rc=%d): %s", rc, error)
+            log.error("!restore from %s (%s): failed (rc=%d): %s", discord_name, character, rc, error)
             await message.channel.send(f"Restore failed: {error}")
     except asyncio.TimeoutError:
-        log.warning("Restore timed out for %s", name)
+        log.warning("!restore from %s (%s): timed out for %r", discord_name, character, name)
         await message.channel.send("Restore timed out. Try again.")
     except Exception as e:
-        log.error("Restore error: %s", e)
+        log.error("!restore from %s (%s): error: %s", discord_name, character, e)
         await message.channel.send(f"Restore error: {e}")
 
 
 @register("list-saves")
 async def handle_list_saves(message, args: str, ctx) -> None:
     """Handle !list-saves -- show all available save points."""
+    discord_name = message.author.display_name
+    user_id = str(message.author.id)
+    character = ctx.player_map.get_character(user_id) or "unregistered"
+    log.info("!list-saves from %s (%s)", discord_name, character)
+
     try:
         rc, stdout, stderr = await _run_session_cmd(ctx, "list-saves")
         if rc == 0 and stdout:
@@ -96,10 +117,11 @@ async def handle_list_saves(message, args: str, ctx) -> None:
             await message.channel.send("No save points found.")
         else:
             error = stderr or stdout
-            log.error("List-saves failed (rc=%d): %s", rc, error)
+            log.error("!list-saves from %s (%s): failed (rc=%d): %s", discord_name, character, rc, error)
             await message.channel.send(f"Failed to list saves: {error}")
     except asyncio.TimeoutError:
+        log.warning("!list-saves from %s (%s): timed out", discord_name, character)
         await message.channel.send("List-saves timed out. Try again.")
     except Exception as e:
-        log.error("List-saves error: %s", e)
+        log.error("!list-saves from %s (%s): error: %s", discord_name, character, e)
         await message.channel.send(f"Error: {e}")

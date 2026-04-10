@@ -26,7 +26,10 @@ _COMMAND_MODULES = [
 @register("internal-reload")
 async def handle_reload(message, args: str, ctx) -> None:
     """Hot-reload command modules. Usage: !reload [module] or !reload (all)."""
+    discord_name = message.author.display_name
+    user_id = str(message.author.id)
     target = args.strip().lower() if args else ""
+    log.info("!reload from %s (user_id=%s): target=%r", discord_name, user_id, target or "all")
 
     if target and target != "all":
         # Reload a single module
@@ -41,10 +44,10 @@ async def handle_reload(message, args: str, ctx) -> None:
 
         try:
             importlib.reload(sys.modules[full_name])
-            log.info("Reloaded command module: %s", target)
+            log.info("!reload from %s: reloaded %s", discord_name, target)
             await message.channel.send(f"Reloaded `{target}`.")
         except Exception as e:
-            log.error("Failed to reload %s: %s", target, e)
+            log.error("!reload from %s: failed to reload %s: %s", discord_name, target, e)
             await message.channel.send(f"Failed to reload `{target}`: {e}")
         return
 
@@ -58,9 +61,10 @@ async def handle_reload(message, args: str, ctx) -> None:
             importlib.reload(sys.modules[mod_name])
             reloaded.append(mod_name.rsplit(".", 1)[-1])
         except Exception as e:
-            log.error("Failed to reload %s: %s", mod_name, e)
+            log.error("!reload from %s: failed to reload %s: %s", discord_name, mod_name, e)
             failed.append(f"{mod_name.rsplit('.', 1)[-1]}: {e}")
 
+    log.info("!reload from %s: reloaded %d modules", discord_name, len(reloaded))
     parts = [f"Reloaded {len(reloaded)} modules: {', '.join(reloaded)}"]
     if failed:
         parts.append(f"Failed: {'; '.join(failed)}")

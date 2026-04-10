@@ -51,5 +51,5 @@ class TestParseCommand:
         assert result is None
 
     def test_all_commands_registered(self):
-        expected = {"dm", "process", "roll", "inventory", "status", "session-start", "session-end", "join", "help", "overview", "save", "restore", "list-saves", "private", "internal-reload"}
+        expected = {"dm", "process", "roll", "inventory", "status", "session-start", "session-end", "join", "help", "overview", "save", "restore", "list-saves", "private", "done", "internal-reload"}
         assert set(COMMANDS.keys()) == expected

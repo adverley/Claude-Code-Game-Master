@@ -1,8 +1,11 @@
 """!inventory command -- show player's inventory via inventory-system module."""
 
+import logging
 import sys
 from pathlib import Path
 from discord_bot.commands import register
+
+log = logging.getLogger("dm_bot.commands")
 
 # Add inventory-system module to path
 _MODULE_LIB = Path(__file__).resolve().parents[2] / ".claude" / "modules" / "inventory-system" / "lib"
@@ -84,12 +87,15 @@ def _format_inventory(char: dict) -> str:
 async def handle_inventory(message, args: str, ctx) -> None:
     """Handle !inventory -- show the requesting player's inventory."""
     user_id = str(message.author.id)
+    discord_name = message.author.display_name
     character = ctx.player_map.get_character(user_id)
 
     if character is None:
+        log.info("!inventory from %s (unregistered, user_id=%s): rejected", discord_name, user_id)
         await message.channel.send("You're not registered. Use `!join <character_name>` first.")
         return
 
+    log.info("!inventory from %s (%s)", discord_name, character)
     try:
         mgr = PlayerManager("world-state", require_active_campaign=True)
         campaign_path = mgr.campaign_dir
@@ -101,4 +107,5 @@ async def handle_inventory(message, args: str, ctx) -> None:
         inv = InventoryManager(campaign_path, character_file=char_file)
         await message.channel.send(_format_inventory(inv.character))
     except (RuntimeError, FileNotFoundError) as e:
+        log.error("!inventory error for %s (%s): %s", discord_name, character, e)
         await message.channel.send(f"Error: {e}")

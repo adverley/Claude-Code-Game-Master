@@ -71,6 +71,7 @@ ehthumbs.db
 *.temp
 /tmp/
 *.log
+logs/
 
 # Coverage & Testing
 .coverage

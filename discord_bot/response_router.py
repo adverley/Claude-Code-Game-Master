@@ -34,7 +34,10 @@ def route_response(text: str) -> RoutedResponse:
     def _extract_public(match: re.Match) -> str:
         content = match.group(1).strip()
         if content:
-            public_announcements.append(content)
+            # Extract any nested [PRIVATE:...] whispers from within the public block
+            content = _PRIVATE_RE.sub(_extract_whisper, content).strip()
+            if content:
+                public_announcements.append(content)
         return ""
 
     text = _MENTAL_MODEL_RE.sub("", text)

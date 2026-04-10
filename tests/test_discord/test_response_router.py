@@ -165,3 +165,21 @@ class TestPublicMarker:
         assert result.public == "Narration."
         assert result.whispers == [("Gandalf", "Secret info.")]
         assert result.public_announcements == []
+
+    def test_private_nested_inside_public_is_extracted_as_whisper(self):
+        """When Claude nests [PRIVATE:name] inside [PUBLIC], the whisper
+        should be extracted and not leaked to the public channel."""
+        text = (
+            "[PUBLIC]\n"
+            "Wielundor leans over and murmurs something to Andraxxus.\n\n"
+            "[PRIVATE:andraxxus]\n"
+            "You hear: \"Popo is a way of life.\"\n"
+            "[/PRIVATE]\n"
+            "[/PUBLIC]"
+        )
+        result = route_response(text)
+        assert result.whispers == [("andraxxus", 'You hear: "Popo is a way of life."')]
+        assert result.public_announcements == [
+            "Wielundor leans over and murmurs something to Andraxxus."
+        ]
+        assert "Popo" not in result.public
