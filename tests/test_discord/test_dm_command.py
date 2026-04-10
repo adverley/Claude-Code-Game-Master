@@ -2,6 +2,7 @@ import pytest
 import discord
 from unittest.mock import AsyncMock, MagicMock, patch
 from discord_bot.commands.dm import handle_dm, handle_process, _maybe_inject_private_prompt
+from discord_bot.private_chat import PrivateChatManager
 
 
 class FakeMessage:
@@ -38,6 +39,7 @@ class FakeCtx:
         mock_dm_user.send = AsyncMock()
         self.client = AsyncMock()
         self.client.fetch_user = AsyncMock(return_value=mock_dm_user)
+        self.private_chat_manager = PrivateChatManager()
 
 
 @pytest.mark.asyncio

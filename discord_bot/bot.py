@@ -14,6 +14,7 @@ from discord_bot.message_buffer import MessageBuffer
 from discord_bot.claude_bridge import ClaudeBridge
 from discord_bot.player_map import PlayerMap
 from discord_bot.commands import parse_command, COMMANDS
+from discord_bot.private_chat import PrivateChatManager
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
@@ -52,6 +53,8 @@ class BotContext:
     player_map: PlayerMap
     channel_id: int
     client: discord.Client = None
+    main_channel: discord.TextChannel = None
+    private_chat_manager: PrivateChatManager = None
 
 
 def on_message_handler(message, ctx: BotContext) -> str:
@@ -145,6 +148,7 @@ def main():
         player_map=PlayerMap(player_map_path),
         channel_id=int(config["channel_id"]),
         client=client,
+        private_chat_manager=PrivateChatManager(),
     )
 
     @client.event
@@ -155,9 +159,19 @@ def main():
         log.info("Campaign: %s", config["campaign"])
         log.info("Model: %s", model_label)
         log.info("Buffer size: %s messages", config["message_buffer_size"])
+        ctx.main_channel = client.get_channel(ctx.channel_id)
+        if ctx.main_channel is None:
+            log.warning("Could not find main channel %s — public notifications will be skipped", ctx.channel_id)
 
     @client.event
     async def on_message(message):
+        if message.author.bot:
+            return
+        # DMs — no guild means direct message
+        if message.guild is None:
+            await ctx.private_chat_manager.handle_dm_message(message, ctx)
+            return
+        # Channel messages — existing logic
         result = on_message_handler(message, ctx)
         if result == "command":
             await dispatch_command(message, ctx)
