@@ -7,7 +7,12 @@ HELP_TEXT = """**D&D Discord Bot Commands:**
 **Gameplay:**
 `!dm <question>` -- Ask the DM a question (no plot advancement)
 `!process <action>` -- Tell the DM what you do (advances the story)
+`!private <question>` -- Ask the DM something privately (response via DM)
 `!roll <dice>` -- Roll dice (e.g. `!roll 1d20+5`, `!roll 3d6`)
+
+**Private Conversations:**
+DM the bot directly to start a private conversation with the DM.
+`!done` -- End the private conversation and publish observable results.
 
 **Character:**
 `!inventory` -- Show your character's equipment
