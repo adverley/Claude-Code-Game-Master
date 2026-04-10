@@ -162,10 +162,16 @@ class PrivateChatManager:
             self.increment_message_count(user_id)
             routed = route_response(response)
 
+            # Send public text + any whispers back to the player.
+            # Claude often wraps DM responses in [PRIVATE:character] markers
+            # even in a private conversation, so we need to capture both.
             reply = routed.public
             if reply:
                 for i in range(0, len(reply), DISCORD_MSG_LIMIT):
                     await message.channel.send(reply[i:i + DISCORD_MSG_LIMIT])
+            for _char_name, whisper_text in routed.whispers:
+                for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
+                    await message.channel.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
         except TimeoutError:
             await message.channel.send("The DM took too long to respond. Try sending your message again.")
         except RuntimeError as e:
@@ -180,9 +186,13 @@ class PrivateChatManager:
             response = await ctx.claude_bridge.send(prompt)
             routed = route_response(response)
 
+            # Send public text + whispers back to the player (same reason as handle_dm_message)
             if routed.public:
                 for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
                     await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
+            for _char_name, whisper_text in routed.whispers:
+                for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
+                    await message.channel.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
 
             if ctx.main_channel:
                 await ctx.main_channel.send(f"*{character} returns to the group.*")

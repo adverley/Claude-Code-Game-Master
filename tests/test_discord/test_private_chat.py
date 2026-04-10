@@ -219,6 +219,34 @@ class TestHandleDmMessage:
         assert msg.channel.send.call_count >= 1
 
 
+    @pytest.mark.asyncio
+    async def test_response_wrapped_in_private_marker_still_delivered(self):
+        """Claude often wraps DM responses in [PRIVATE:character] — player must still receive them."""
+        mgr = PrivateChatManager()
+        ctx = _make_ctx(claude_response="[PRIVATE:Thorin]Secret lore about your backstory.[/PRIVATE]")
+        msg = _make_message("Tell me something nobody knows about Thorin")
+
+        await mgr.handle_dm_message(msg, ctx)
+
+        # The player should receive the whisper content even though public is empty
+        dm_calls = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert any("Secret lore" in text for text in dm_calls)
+
+    @pytest.mark.asyncio
+    async def test_done_response_wrapped_in_private_marker_still_delivered(self):
+        """Claude may wrap !done response in [PRIVATE:character] — player must still receive it."""
+        mgr = PrivateChatManager()
+        ctx = _make_ctx(claude_response="[PRIVATE:Thorin]The deal is done.[/PRIVATE]\n[PUBLIC]The NPC nods.[/PUBLIC]")
+        msg_start = _make_message("I bribe the guard")
+        msg_done = _make_message("!done")
+
+        await mgr.handle_dm_message(msg_start, ctx)
+        await mgr.handle_dm_message(msg_done, ctx)
+
+        dm_calls = [c[0][0] for c in msg_done.channel.send.call_args_list]
+        assert any("deal is done" in text for text in dm_calls)
+
+
 class TestFullFlow:
     @pytest.mark.asyncio
     async def test_full_flow_start_chat_exchange_done(self):
