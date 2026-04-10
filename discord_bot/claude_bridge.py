@@ -115,6 +115,49 @@ class ClaudeBridge:
             self._session_started = True
             return response
 
+    def _build_oneshot_command(self, prompt: str) -> list[str]:
+        """Build a one-shot claude CLI command (no session)."""
+        cmd = ["claude", "--print"]
+        if self._model:
+            cmd += ["--model", self._model]
+        if self._claude_debug:
+            cmd.append("--debug")
+        cmd.append(prompt)
+        return cmd
+
+    async def send_oneshot(self, prompt: str, timeout: float = 60.0) -> str:
+        """Run a single prompt without a session. For lite-mode queries."""
+        cmd = self._build_oneshot_command(prompt)
+        log.info("Claude oneshot [timeout=%.0fs]", timeout)
+        log.debug("Oneshot command: %s", " ".join(cmd[:-1]))
+        log.debug("--- ONESHOT PROMPT START (%d chars) ---\n%s\n--- ONESHOT PROMPT END ---", len(prompt), prompt)
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(self._project_dir),
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            log.error("Claude oneshot timed out after %.0fs", timeout)
+            raise TimeoutError(f"Claude did not respond within {timeout}s")
+
+        stderr_text = stderr.decode().strip() if stderr else ""
+        if proc.returncode != 0:
+            log.error("Claude oneshot exited %d\nstderr: %s", proc.returncode, stderr_text)
+            raise RuntimeError(f"Claude exited with code {proc.returncode}: {stderr_text}")
+
+        response = stdout.decode().strip()
+        log.info("Claude oneshot responded (%d chars)", len(response))
+        log.debug("--- ONESHOT RESPONSE START ---\n%s\n--- ONESHOT RESPONSE END ---", response)
+        return response
+
     async def send_init(self, campaign: str, players: dict[str, dict], timeout: float = 180.0) -> str:
         """Initialize a new session with the DM prompt."""
         prompt = self._build_init_prompt(campaign, players)

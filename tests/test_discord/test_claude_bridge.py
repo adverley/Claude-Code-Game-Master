@@ -2,6 +2,31 @@ import pytest
 from discord_bot.claude_bridge import ClaudeBridge
 
 
+class TestOneshootCommand:
+    def test_build_oneshot_command_basic(self):
+        bridge = ClaudeBridge(project_dir="/fake/dir")
+        cmd = bridge._build_oneshot_command("What spells do I have?")
+        assert cmd == ["claude", "--print", "What spells do I have?"]
+
+    def test_build_oneshot_command_with_model(self):
+        bridge = ClaudeBridge(project_dir="/fake/dir", model="sonnet")
+        cmd = bridge._build_oneshot_command("Question?")
+        assert cmd == ["claude", "--print", "--model", "sonnet", "Question?"]
+
+    def test_build_oneshot_command_with_debug(self):
+        bridge = ClaudeBridge(project_dir="/fake/dir", claude_debug=True)
+        cmd = bridge._build_oneshot_command("Question?")
+        assert cmd == ["claude", "--print", "--debug", "Question?"]
+
+    def test_build_oneshot_does_not_use_session(self):
+        bridge = ClaudeBridge(project_dir="/fake/dir")
+        bridge.start_session("test-campaign")
+        cmd = bridge._build_oneshot_command("Question?")
+        # Must NOT contain --session-id or --resume
+        assert "--session-id" not in cmd
+        assert "--resume" not in cmd
+
+
 class TestClaudeBridge:
     def test_initial_state_no_session(self):
         bridge = ClaudeBridge(project_dir="/fake/path")
