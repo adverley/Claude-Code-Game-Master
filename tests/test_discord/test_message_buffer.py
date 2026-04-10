@@ -60,6 +60,39 @@ class TestMessageBuffer:
         assert "Active player: Erik (Thorin)" in formatted
         assert "Action: I search the room" in formatted
 
+    def test_get_delta_after_eviction(self):
+        """Regression: _sent_index must adjust when deque evicts old messages."""
+        buf = MessageBuffer(max_size=3)
+        buf.add("A", "CharA", "msg1")
+        buf.add("B", "CharB", "msg2")
+        buf.add("C", "CharC", "msg3")  # buffer now full
+
+        buf.mark_sent()  # _sent_index = 3
+
+        # New messages evict old ones
+        buf.add("D", "CharD", "msg4")
+        buf.add("E", "CharE", "msg5")
+
+        delta = buf.get_delta()
+        assert len(delta) == 2
+        assert delta[0]["content"] == "msg4"
+        assert delta[1]["content"] == "msg5"
+
+    def test_get_delta_many_evictions_after_mark(self):
+        """All messages evicted after mark_sent should appear in delta."""
+        buf = MessageBuffer(max_size=3)
+        buf.add("A", "CharA", "msg1")
+        buf.mark_sent()
+
+        # Add enough to fill and overflow
+        for i in range(5):
+            buf.add("X", "CharX", f"new{i}")
+
+        delta = buf.get_delta()
+        # Buffer holds last 3: new2, new3, new4 — all unsent
+        assert len(delta) == 3
+        assert delta[0]["content"] == "new2"
+
     def test_add_stores_timestamp(self):
         buf = MessageBuffer(max_size=5)
         buf.add("Erik", "Thorin", "test")

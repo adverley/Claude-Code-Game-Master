@@ -51,10 +51,17 @@ async def handle_session_end(message, args: str, ctx) -> None:
     await message.channel.send("*Ending session...*")
 
     try:
-        prompt = f"The session is ending. Please wrap up the narrative with a closing scene. Summary: {summary}"
+        prompt = (
+            f"The session is ending. Please wrap up the narrative with a closing scene. Summary: {summary}\n\n"
+            f"Keep all DM-internal information (pending consequences, upcoming events, future plot) "
+            f"inside [MENTAL MODEL]...[/MENTAL MODEL] tags — it will be filtered before reaching players."
+        )
         response = await ctx.claude_bridge.send(prompt)
-        for i in range(0, len(response), DISCORD_MSG_LIMIT):
-            await message.channel.send(response[i:i + DISCORD_MSG_LIMIT])
+        routed = route_response(response)
+        if routed.public:
+            for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
+                await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
+        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
     except (TimeoutError, RuntimeError) as e:
         await message.channel.send(f"Error during session end: {e}")
     finally:

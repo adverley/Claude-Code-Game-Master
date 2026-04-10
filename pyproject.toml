@@ -109,3 +109,4 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests", ".claude/modules"]
+env = ["PYTHONIOENCODING=utf-8"]

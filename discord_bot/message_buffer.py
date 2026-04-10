@@ -11,6 +11,10 @@ class MessageBuffer:
 
     def add(self, discord_name: str, character_name: str, content: str) -> None:
         """Add a plain chat message to the buffer (commands are excluded)."""
+        # When deque is full, appending evicts the oldest message — adjust the
+        # sent-index so get_delta() still returns the correct unsent slice.
+        if len(self._messages) == self._messages.maxlen:
+            self._sent_index = max(0, self._sent_index - 1)
         self._messages.append({
             "discord_name": discord_name,
             "character_name": character_name,
