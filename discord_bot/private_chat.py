@@ -1,9 +1,38 @@
 """Manages multi-turn private DM conversations between players and the DM bot."""
 
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
+
+from discord_bot.response_router import route_response
 
 log = logging.getLogger("dm_bot.private_chat")
+
+DISCORD_MSG_LIMIT = 2000
+
+
+def _load_lite_context(project_dir: str, campaign: str, character: str) -> tuple[str, str]:
+    """Load minimal character + campaign data for lite-mode queries."""
+    base = Path(project_dir) / "world-state" / "campaigns" / campaign
+
+    char_path = base / "characters" / f"{character.lower()}.json"
+    if not char_path.exists():
+        char_path = base / "character.json"
+    character_json = ""
+    if char_path.exists():
+        character_json = char_path.read_text(encoding="utf-8")
+
+    overview_path = base / "campaign-overview.json"
+    campaign_info = ""
+    if overview_path.exists():
+        data = json.loads(overview_path.read_text(encoding="utf-8"))
+        parts = [f"Campaign: {data.get('campaign_name', campaign)}"]
+        if data.get("current_location"):
+            parts.append(f"Current location: {data['current_location']}")
+        campaign_info = "\n".join(parts)
+
+    return character_json, campaign_info
 
 
 @dataclass
@@ -89,3 +118,110 @@ class PrivateChatManager:
             f"Answer mechanics, spells, inventory, and character questions only. "
             f"No plot advancement, no narrative."
         )
+
+    async def handle_dm_message(self, message, ctx) -> None:
+        """Main entry point for all Discord DMs from players."""
+        user_id = str(message.author.id)
+        content = message.content.strip()
+
+        character = ctx.player_map.get_character(user_id)
+        if character is None:
+            await message.channel.send(
+                "I don't recognize you. Use `!join <character_name>` in the game channel first."
+            )
+            return
+
+        discord_name = ctx.player_map.get_discord_name(user_id)
+
+        if content.lower() == "!done":
+            if not self.is_active(user_id):
+                await message.channel.send("You don't have an active private conversation.")
+                return
+            await self._handle_done(message, ctx, user_id, character, discord_name)
+            return
+
+        if not ctx.claude_bridge.is_active:
+            await self._handle_lite(message, ctx, user_id, character, discord_name, content)
+            return
+
+        is_first = not self.is_active(user_id)
+        if is_first:
+            self.start_chat(user_id, character=character, discord_name=discord_name)
+            if ctx.main_channel:
+                await ctx.main_channel.send(f"*{character} pulls the DM aside for a private word...*")
+
+        prompt = self.build_prompt(
+            character=character,
+            discord_name=discord_name,
+            message_content=content,
+            is_first_message=is_first,
+        )
+
+        try:
+            response = await ctx.claude_bridge.send(prompt)
+            self.increment_message_count(user_id)
+            routed = route_response(response)
+
+            reply = routed.public
+            if reply:
+                for i in range(0, len(reply), DISCORD_MSG_LIMIT):
+                    await message.channel.send(reply[i:i + DISCORD_MSG_LIMIT])
+        except TimeoutError:
+            await message.channel.send("The DM took too long to respond. Try sending your message again.")
+        except RuntimeError as e:
+            log.error("Claude error in private chat for %s: %s", character, e)
+            await message.channel.send(f"DM error: {e}")
+
+    async def _handle_done(self, message, ctx, user_id: str,
+                           character: str, discord_name: str) -> None:
+        """End a private conversation and post [PUBLIC] outcomes to channel."""
+        prompt = self.build_done_prompt(character=character)
+        try:
+            response = await ctx.claude_bridge.send(prompt)
+            routed = route_response(response)
+
+            if routed.public:
+                for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
+                    await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
+
+            if ctx.main_channel:
+                await ctx.main_channel.send(f"*{character} returns to the group.*")
+                for announcement in routed.public_announcements:
+                    for i in range(0, len(announcement), DISCORD_MSG_LIMIT):
+                        await ctx.main_channel.send(announcement[i:i + DISCORD_MSG_LIMIT])
+        except TimeoutError:
+            await message.channel.send("The DM took too long to respond. Try `!done` again.")
+            return
+        except RuntimeError as e:
+            log.error("Claude error on !done for %s: %s", character, e)
+            await message.channel.send(f"DM error: {e}")
+            return
+
+        self.end_chat(user_id)
+
+    async def _handle_lite(self, message, ctx, user_id: str,
+                           character: str, discord_name: str, content: str) -> None:
+        """Handle a DM when no session is active (lite mode)."""
+        character_json, campaign_info = _load_lite_context(
+            str(ctx.claude_bridge._project_dir),
+            ctx.config["campaign"],
+            character,
+        )
+        prompt = self.build_lite_prompt(
+            character=character,
+            message_content=content,
+            character_json=character_json,
+            campaign_info=campaign_info,
+        )
+        try:
+            response = await ctx.claude_bridge.send_oneshot(prompt)
+            await message.channel.send(
+                "*(No active session — I can answer basic mechanics and character questions.)*"
+            )
+            for i in range(0, len(response), DISCORD_MSG_LIMIT):
+                await message.channel.send(response[i:i + DISCORD_MSG_LIMIT])
+        except TimeoutError:
+            await message.channel.send("The DM took too long to respond. Try again.")
+        except RuntimeError as e:
+            log.error("Claude lite-mode error for %s: %s", character, e)
+            await message.channel.send(f"DM error: {e}")

@@ -1,5 +1,8 @@
 """Tests for discord_bot.private_chat."""
 
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from discord_bot.private_chat import PrivateChatManager
 
 
@@ -108,3 +111,109 @@ class TestPromptBuilding:
         assert campaign_info in prompt
         assert "What spells do I have?" in prompt
         assert "No plot advancement" in prompt
+
+
+def _make_ctx(*, session_active=True, character="Thorin", discord_name="Player1",
+              user_id="12345", claude_response="DM response."):
+    """Build a minimal mock BotContext."""
+    ctx = MagicMock()
+    ctx.player_map.get_character.return_value = character
+    ctx.player_map.get_discord_name.return_value = discord_name
+    ctx.claude_bridge.is_active = session_active
+    ctx.claude_bridge.send = AsyncMock(return_value=claude_response)
+    ctx.claude_bridge.send_oneshot = AsyncMock(return_value=claude_response)
+    ctx.main_channel = AsyncMock()
+    ctx.config = {"campaign": "test-campaign"}
+    ctx.claude_bridge._project_dir = "/fake/dir"
+    return ctx
+
+
+def _make_message(content, user_id="12345"):
+    """Build a minimal mock Discord DM message."""
+    msg = AsyncMock()
+    msg.content = content
+    msg.author.id = int(user_id)
+    msg.author.bot = False
+    msg.channel.send = AsyncMock()
+    return msg
+
+
+class TestHandleDmMessage:
+    @pytest.mark.asyncio
+    async def test_unregistered_player(self):
+        mgr = PrivateChatManager()
+        ctx = _make_ctx()
+        ctx.player_map.get_character.return_value = None
+        msg = _make_message("Hello DM")
+
+        await mgr.handle_dm_message(msg, ctx)
+        msg.channel.send.assert_called_once()
+        call_text = msg.channel.send.call_args[0][0]
+        assert "join" in call_text.lower()
+
+    @pytest.mark.asyncio
+    async def test_starts_new_chat(self):
+        mgr = PrivateChatManager()
+        ctx = _make_ctx()
+        msg = _make_message("Can I sneak past?")
+
+        await mgr.handle_dm_message(msg, ctx)
+        assert mgr.is_active("12345")
+        ctx.main_channel.send.assert_called()
+        channel_text = ctx.main_channel.send.call_args[0][0]
+        assert "Thorin" in channel_text
+        msg.channel.send.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_continues_existing_chat(self):
+        mgr = PrivateChatManager()
+        ctx = _make_ctx()
+        msg1 = _make_message("First message")
+        msg2 = _make_message("Follow up")
+
+        await mgr.handle_dm_message(msg1, ctx)
+        await mgr.handle_dm_message(msg2, ctx)
+
+        assert mgr.get_active_chats()["12345"].message_count == 2
+        assert ctx.claude_bridge.send.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_done_ends_chat(self):
+        mgr = PrivateChatManager()
+        ctx = _make_ctx(claude_response="Farewell.\n[PUBLIC]The NPC calms down.[/PUBLIC]")
+        msg_start = _make_message("I want to bribe the guard")
+        msg_done = _make_message("!done")
+
+        await mgr.handle_dm_message(msg_start, ctx)
+        await mgr.handle_dm_message(msg_done, ctx)
+
+        assert not mgr.is_active("12345")
+        channel_calls = [c[0][0] for c in ctx.main_channel.send.call_args_list]
+        joined = " ".join(channel_calls)
+        assert "NPC calms down" in joined
+
+    @pytest.mark.asyncio
+    async def test_done_when_not_active(self):
+        mgr = PrivateChatManager()
+        ctx = _make_ctx()
+        msg = _make_message("!done")
+
+        await mgr.handle_dm_message(msg, ctx)
+        msg.channel.send.assert_called_once()
+        call_text = msg.channel.send.call_args[0][0]
+        assert "no active" in call_text.lower() or "don't have" in call_text.lower()
+
+    @pytest.mark.asyncio
+    async def test_lite_mode_no_session(self):
+        mgr = PrivateChatManager()
+        ctx = _make_ctx(session_active=False, claude_response="You have 3 spell slots.")
+        msg = _make_message("What spells do I have?")
+
+        with patch("discord_bot.private_chat._load_lite_context", return_value=("char json", "campaign info")):
+            await mgr.handle_dm_message(msg, ctx)
+
+        assert not mgr.is_active("12345")
+        ctx.claude_bridge.send_oneshot.assert_called_once()
+        ctx.claude_bridge.send.assert_not_called()
+        # Should have sent at least the lite-mode notice
+        assert msg.channel.send.call_count >= 1
