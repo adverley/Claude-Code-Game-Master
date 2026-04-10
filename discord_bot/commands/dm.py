@@ -146,6 +146,11 @@ async def handle_process(message, args: str, ctx) -> None:
     log.debug("Payload built (%d chars)", len(payload))
     payload = _maybe_inject_private_prompt(payload, ctx.player_map, exclude_character=character)
 
+    # Notify Claude about any ongoing private conversations
+    private_notes = ctx.private_chat_manager.build_process_notes()
+    if private_notes:
+        payload += "\n\n" + private_notes
+
     thinking_msg = await message.channel.send("*The DM is thinking...*")
     try:
         response = await ctx.claude_bridge.send(payload)
