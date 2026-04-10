@@ -2,7 +2,7 @@ import pytest
 from discord_bot.claude_bridge import ClaudeBridge
 
 
-class TestOneshootCommand:
+class TestOneshotCommand:
     def test_build_oneshot_command_basic(self):
         bridge = ClaudeBridge(project_dir="/fake/dir")
         cmd = bridge._build_oneshot_command("What spells do I have?")
