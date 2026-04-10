@@ -149,6 +149,9 @@ class PrivateChatManager:
             self.start_chat(user_id, character=character, discord_name=discord_name)
             if ctx.main_channel:
                 await ctx.main_channel.send(f"*{character} pulls the DM aside for a private word...*")
+            await message.channel.send(
+                "*Private conversation started. Type `!done` when you're finished to wrap up and publish any results to the group.*"
+            )
 
         prompt = self.build_prompt(
             character=character,
@@ -226,7 +229,7 @@ class PrivateChatManager:
         try:
             response = await ctx.claude_bridge.send_oneshot(prompt)
             await message.channel.send(
-                "*(No active session — I can answer basic mechanics and character questions.)*"
+                "*(No active session — I can answer basic mechanics and character questions. I only remember this question so for follow-up questions, tell me what we already discussed...)*"
             )
             for i in range(0, len(response), DISCORD_MSG_LIMIT):
                 await message.channel.send(response[i:i + DISCORD_MSG_LIMIT])
