@@ -217,3 +217,46 @@ class TestHandleDmMessage:
         ctx.claude_bridge.send.assert_not_called()
         # Should have sent at least the lite-mode notice
         assert msg.channel.send.call_count >= 1
+
+
+class TestFullFlow:
+    @pytest.mark.asyncio
+    async def test_full_flow_start_chat_exchange_done(self):
+        """Integration test: start -> exchange -> !done with [PUBLIC] output."""
+        mgr = PrivateChatManager()
+
+        ctx = _make_ctx()
+        responses = [
+            "Interesting. What do you offer the guard?",
+            "The guard considers your offer. He seems interested.",
+            "Good luck.\n[PUBLIC]The guard steps aside and opens the gate.[/PUBLIC]",
+        ]
+        ctx.claude_bridge.send = AsyncMock(side_effect=responses)
+
+        msg1 = _make_message("I want to bribe the guard")
+        msg2 = _make_message("I offer 50 gold")
+        msg_done = _make_message("!done")
+
+        # Start chat
+        await mgr.handle_dm_message(msg1, ctx)
+        assert mgr.is_active("12345")
+        ctx.main_channel.send.assert_called_with("*Thorin pulls the DM aside for a private word...*")
+        assert "What do you offer" in msg1.channel.send.call_args[0][0]
+
+        # Continue chat
+        await mgr.handle_dm_message(msg2, ctx)
+        assert mgr.get_active_chats()["12345"].message_count == 2
+
+        # End chat
+        ctx.main_channel.send.reset_mock()
+        await mgr.handle_dm_message(msg_done, ctx)
+        assert not mgr.is_active("12345")
+
+        # Verify channel received: return notification + [PUBLIC] content
+        channel_calls = [c[0][0] for c in ctx.main_channel.send.call_args_list]
+        assert channel_calls[0] == "*Thorin returns to the group.*"
+        assert "guard steps aside" in channel_calls[1]
+
+        # Verify player received the private wrap-up
+        done_dm_text = msg_done.channel.send.call_args[0][0]
+        assert "Good luck" in done_dm_text
