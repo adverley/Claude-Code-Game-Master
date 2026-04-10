@@ -133,6 +133,7 @@ async def handle_process(message, args: str, ctx) -> None:
     discord_name, character = result
 
     delta = ctx.message_buffer.get_delta()
+    ctx.message_buffer.mark_sent()
     log.info("!process from %s (%s): %d buffered messages, args=%r", discord_name, character, len(delta), args[:50] if args else "")
 
     payload = ctx.message_buffer.format_for_claude(
@@ -163,5 +164,3 @@ async def handle_process(message, args: str, ctx) -> None:
         await message.channel.send(f"DM error: {e}")
     finally:
         await thinking_msg.delete()
-        ctx.message_buffer.mark_sent()
-        log.debug("Message buffer marked sent")

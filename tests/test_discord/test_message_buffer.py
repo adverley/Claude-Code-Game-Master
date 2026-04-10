@@ -93,6 +93,31 @@ class TestMessageBuffer:
         assert len(delta) == 3
         assert delta[0]["content"] == "new2"
 
+    def test_messages_added_after_mark_sent_not_lost(self):
+        """Regression: messages arriving between get_delta() and mark_sent()
+        must appear in the next get_delta(), not be silently dropped."""
+        buf = MessageBuffer(max_size=50)
+        buf.add("A", "CharA", "old msg")
+        buf.mark_sent()
+
+        # Player 1 sends a message, then !process is invoked
+        buf.add("B", "CharB", "included in payload")
+        delta = buf.get_delta()
+        assert len(delta) == 1
+
+        # mark_sent() is called right after get_delta(), before async work
+        buf.mark_sent()
+
+        # While Claude is processing, Player 2 sends messages
+        buf.add("C", "CharC", "arrived during processing")
+        buf.add("D", "CharD", "also arrived during processing")
+
+        # Next !process should see those messages
+        delta2 = buf.get_delta()
+        assert len(delta2) == 2
+        assert delta2[0]["content"] == "arrived during processing"
+        assert delta2[1]["content"] == "also arrived during processing"
+
     def test_add_stores_timestamp(self):
         buf = MessageBuffer(max_size=5)
         buf.add("Erik", "Thorin", "test")
