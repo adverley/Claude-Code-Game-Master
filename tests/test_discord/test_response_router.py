@@ -98,3 +98,70 @@ class TestMentalModelStripping:
         result = route_response(text)
         assert result.public == "Torches flicker."
         assert result.whispers == [("elara", "You hear a whisper.")]
+
+
+class TestPublicMarker:
+    def test_no_markers_has_empty_announcements(self):
+        result = route_response("Just some plain text.")
+        assert result.public_announcements == []
+
+    def test_public_marker_extracted(self):
+        text = (
+            "Private reply to player.\n\n"
+            "[PUBLIC]The NPC sheathes his blade and joins the party.[/PUBLIC]"
+        )
+        result = route_response(text)
+        assert result.public == "Private reply to player."
+        assert result.public_announcements == [
+            "The NPC sheathes his blade and joins the party."
+        ]
+
+    def test_multiple_public_markers(self):
+        text = (
+            "Some DM text.\n\n"
+            "[PUBLIC]First observable thing.[/PUBLIC]\n"
+            "More DM text.\n"
+            "[PUBLIC]Second observable thing.[/PUBLIC]"
+        )
+        result = route_response(text)
+        assert "Some DM text." in result.public
+        assert "More DM text." in result.public
+        assert result.public_announcements == [
+            "First observable thing.",
+            "Second observable thing.",
+        ]
+
+    def test_public_and_private_markers_together(self):
+        text = (
+            "Reply to player.\n\n"
+            "[PUBLIC]The door opens.[/PUBLIC]\n\n"
+            "[PRIVATE:Thorin]You notice a trap.[/PRIVATE]"
+        )
+        result = route_response(text)
+        assert result.public == "Reply to player."
+        assert result.public_announcements == ["The door opens."]
+        assert result.whispers == [("Thorin", "You notice a trap.")]
+
+    def test_public_marker_with_mental_model(self):
+        text = (
+            "[MENTAL MODEL]DM notes here.[/MENTAL MODEL]\n"
+            "Visible text.\n"
+            "[PUBLIC]Something everyone sees.[/PUBLIC]"
+        )
+        result = route_response(text)
+        assert result.public == "Visible text."
+        assert "DM notes" not in result.public
+        assert result.public_announcements == ["Something everyone sees."]
+
+    def test_empty_public_marker(self):
+        text = "Reply.\n[PUBLIC][/PUBLIC]"
+        result = route_response(text)
+        assert result.public == "Reply."
+        assert result.public_announcements == []
+
+    def test_existing_private_marker_still_works(self):
+        text = "Narration.\n[PRIVATE:Gandalf]Secret info.[/PRIVATE]"
+        result = route_response(text)
+        assert result.public == "Narration."
+        assert result.whispers == [("Gandalf", "Secret info.")]
+        assert result.public_announcements == []
