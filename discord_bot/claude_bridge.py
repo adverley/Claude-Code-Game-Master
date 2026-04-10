@@ -62,6 +62,7 @@ class ClaudeBridge:
             f"This is a multi-player D&D session running via Discord.\n"
             f"Campaign: {campaign}\n\n"
             f"Players:\n{player_block}\n\n"
+            f"Only allow a player to perform the action of that character!!!\n"
             f"YOU roll ALL dice for every player — attacks, checks, saves, damage. "
             f"Never ask a player to roll; use `uv run python lib/dice.py \"[notation]\"` yourself.\n\n"
             f"If something happens that only one character would see, hear, or know, "
