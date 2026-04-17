@@ -118,23 +118,15 @@ async def handle_dm(message, args: str, ctx) -> None:
         await thinking_msg.delete()
 
 
-@register("process")
-async def handle_process(message, args: str, ctx) -> None:
-    """Handle !process <text> -- advance the plot based on player actions."""
-    dm_player = ctx.config.get("dm_player", "").strip()
-    if dm_player and message.author.display_name != dm_player:
-        log.info("!process blocked for %s (only %s may advance the story)", message.author.display_name, dm_player)
-        await message.channel.send(f"Only **{dm_player}** can advance the story with `!process`.")
-        return
-
-    result = await _resolve_player(message, ctx)
-    if result is None:
-        return
-    discord_name, character = result
+async def _advance_plot(message, args: str, ctx) -> None:
+    """Format buffer, send to Claude, route response. Called by !process and !progress."""
+    user_id = str(message.author.id)
+    character = ctx.player_map.get_character(user_id)
+    discord_name = ctx.player_map.get_discord_name(user_id)
 
     delta = ctx.message_buffer.get_delta()
     ctx.message_buffer.mark_sent()
-    log.info("!process from %s (%s): %d buffered messages, args=%r", discord_name, character, len(delta), args[:50] if args else "")
+    log.info("Advancing plot: %d buffered messages, args=%r", len(delta), args[:50] if args else "")
 
     payload = ctx.message_buffer.format_for_claude(
         delta,
@@ -143,10 +135,8 @@ async def handle_process(message, args: str, ctx) -> None:
         command_text=args,
         advance_plot=True,
     )
-    log.debug("Payload built (%d chars)", len(payload))
     payload = _maybe_inject_private_prompt(payload, ctx.player_map, exclude_character=character)
 
-    # Notify Claude about any ongoing private conversations
     private_notes = ctx.private_chat_manager.build_process_notes()
     if private_notes:
         payload += "\n\n" + private_notes
@@ -162,10 +152,27 @@ async def handle_process(message, args: str, ctx) -> None:
 
         await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
     except TimeoutError:
-        log.warning("Claude timed out for !process from %s", discord_name)
+        log.warning("Claude timed out for plot advancement from %s", message.author.display_name)
         await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
     except RuntimeError as e:
-        log.error("Claude error for !process from %s: %s", discord_name, e)
+        log.error("Claude error for plot advancement from %s: %s", message.author.display_name, e)
         await message.channel.send(f"DM error: {e}")
     finally:
         await thinking_msg.delete()
+
+
+@register("process")
+async def handle_process(message, args: str, ctx) -> None:
+    """Handle !process <text> -- advance the plot based on player actions."""
+    dm_player = ctx.config.get("dm_player", "").strip()
+    if dm_player and message.author.display_name != dm_player:
+        log.info("!process blocked for %s (only %s may advance)", message.author.display_name, dm_player)
+        await message.channel.send(f"Only **{dm_player}** can advance the story with `!process`.")
+        return
+
+    result = await _resolve_player(message, ctx)
+    if result is None:
+        return
+    discord_name, character = result
+    log.info("!process from %s (%s): args=%r", discord_name, character, args[:50] if args else "")
+    await _advance_plot(message, args, ctx)

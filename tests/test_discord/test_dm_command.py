@@ -1,7 +1,7 @@
 import pytest
 import discord
 from unittest.mock import AsyncMock, MagicMock, patch
-from discord_bot.commands.dm import handle_dm, handle_process, _maybe_inject_private_prompt
+from discord_bot.commands.dm import handle_dm, handle_process, _maybe_inject_private_prompt, _advance_plot
 from discord_bot.private_chat import PrivateChatManager
 
 
@@ -327,4 +327,26 @@ class TestMaybeInjectPrivatePrompt:
 
         # Thorin should not be in the candidates list
         assert "Thorin" not in picked
+
+
+@pytest.mark.asyncio
+class TestAdvancePlot:
+    async def test_sends_to_claude_and_posts_response(self):
+        msg = FakeMessage()
+        ctx = FakeCtx()
+        ctx.claude_bridge.send = AsyncMock(return_value="The gate swings open.")
+
+        await _advance_plot(msg, "we push the gate", ctx)
+
+        ctx.claude_bridge.send.assert_called_once()
+        calls = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert any("gate" in c for c in calls)
+
+    async def test_marks_buffer_sent(self):
+        msg = FakeMessage()
+        ctx = FakeCtx()
+
+        await _advance_plot(msg, "anything", ctx)
+
+        ctx.message_buffer.mark_sent.assert_called_once()
 
