@@ -20,6 +20,7 @@ _COMMAND_MODULES = [
     "discord_bot.commands.overview",
     "discord_bot.commands.save",
     "discord_bot.commands.private",
+    "discord_bot.commands.summary",
 ]
 
 
