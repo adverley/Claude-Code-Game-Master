@@ -56,5 +56,23 @@ class TestParseCommand:
         assert args == ""
 
     def test_all_commands_registered(self):
-        expected = {"dm", "process", "roll", "inventory", "status", "session-start", "session-end", "join", "help", "overview", "save", "restore", "list-saves", "private", "done", "internal-reload", "characters", "summary"}
+        expected = {
+            "dm", "process", "progress", "pace",
+            "roll", "inventory", "status",
+            "session-start", "session-end",
+            "join", "help", "overview",
+            "save", "restore", "list-saves",
+            "private", "done", "internal-reload",
+            "characters", "summary",
+        }
         assert set(COMMANDS.keys()) == expected
+
+    def test_parse_progress_command(self):
+        cmd, args = parse_command("!progress we enter the dungeon")
+        assert cmd == "progress"
+        assert args == "we enter the dungeon"
+
+    def test_parse_pace_command(self):
+        cmd, args = parse_command("!pace active")
+        assert cmd == "pace"
+        assert args == "active"
