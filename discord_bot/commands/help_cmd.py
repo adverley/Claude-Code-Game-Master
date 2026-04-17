@@ -24,6 +24,8 @@ DM the bot directly to start a private conversation with the DM.
 
 **World:**
 `!overview` -- Show current world state (locations, NPCs, quests)
+`!characters` -- Show all characters and who has claimed them
+`!summary` -- Get a brief recap of the story so far (+ your character's perspective)
 
 **Session:**
 `!session-start` -- Start a new DM session
