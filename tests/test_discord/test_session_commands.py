@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from discord_bot.commands.session import handle_session_start, handle_session_end
 
@@ -24,7 +25,8 @@ class FakeCtx:
         self.player_map.get_all.return_value = {
             "111": {"discord_name": "Erik", "character": "thorin"}
         }
-        self.config = {"campaign": "test-campaign"}
+        self.config = {}
+        self.campaign_dir = Path("world-state/campaigns/test-campaign")
         mock_dm_user = AsyncMock()
         mock_dm_user.send = AsyncMock()
         self.client = AsyncMock()

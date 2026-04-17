@@ -25,7 +25,7 @@ async def handle_session_start(message, args: str, ctx) -> None:
         await message.channel.send("A session is already active. Use `!session-end` first.")
         return
 
-    campaign = ctx.config["campaign"]
+    campaign = ctx.campaign_dir.name
     log.info("!session-start from %s (%s): starting campaign %r", discord_name, character, campaign)
     await message.channel.send(f"*Starting DM session for **{campaign}**...*")
 

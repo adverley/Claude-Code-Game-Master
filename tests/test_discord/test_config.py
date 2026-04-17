@@ -16,12 +16,10 @@ class TestLoadConfig:
         path = write_config(tmp_path, {
             "bot_token": "test-token-123",
             "channel_id": "999888777",
-            "campaign": "lost-mines",
         })
         cfg = load_config(path)
         assert cfg["bot_token"] == "test-token-123"
         assert cfg["channel_id"] == "999888777"
-        assert cfg["campaign"] == "lost-mines"
         assert cfg["message_buffer_size"] == 50  # default
 
     def test_missing_required_field_raises(self, tmp_path):
@@ -40,7 +38,6 @@ class TestLoadConfig:
         path = write_config(tmp_path, {
             "bot_token": "tok",
             "channel_id": "123",
-            "campaign": "test",
             "message_buffer_size": 100,
         })
         cfg = load_config(path)

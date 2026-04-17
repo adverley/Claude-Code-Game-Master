@@ -18,8 +18,28 @@ from discord_bot.private_chat import PrivateChatManager
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
+ACTIVE_CAMPAIGN_FILE = PROJECT_DIR / "world-state" / "active-campaign.txt"
 
 log = logging.getLogger("dm_bot")
+
+
+def get_active_campaign() -> str:
+    """Read the active campaign name from world-state/active-campaign.txt."""
+    if not ACTIVE_CAMPAIGN_FILE.exists():
+        raise RuntimeError(
+            "No active campaign. Run /new-game or set one with dm-campaign.sh first."
+        )
+    name = ACTIVE_CAMPAIGN_FILE.read_text(encoding="utf-8").strip()
+    if not name:
+        raise RuntimeError(
+            "active-campaign.txt is empty. Set a campaign with dm-campaign.sh first."
+        )
+    campaign_dir = PROJECT_DIR / "world-state" / "campaigns" / name
+    if not campaign_dir.is_dir():
+        raise RuntimeError(
+            f"Campaign directory not found: {campaign_dir}"
+        )
+    return name
 
 
 def setup_logging(level: str = "INFO") -> None:
@@ -146,7 +166,9 @@ def main():
     log.info("Starting DM bot (log level: %s)", log_level)
 
     config = load_config(CONFIG_PATH)
-    log.info("Config loaded — campaign: %s, channel: %s", config["campaign"], config["channel_id"])
+
+    campaign = get_active_campaign()
+    log.info("Config loaded — campaign: %s, channel: %s", campaign, config["channel_id"])
 
     # CLI --model overrides config.json
     model = args.model.strip() or config.get("model", "")
@@ -157,7 +179,7 @@ def main():
     intents.message_content = True
     client = discord.Client(intents=intents)
 
-    campaign_dir = PROJECT_DIR / "world-state" / "campaigns" / config["campaign"]
+    campaign_dir = PROJECT_DIR / "world-state" / "campaigns" / campaign
     player_map_path = campaign_dir / "player-map.json"
 
     ctx = BotContext(
@@ -176,7 +198,7 @@ def main():
         model_label = model or "Claude Code default"
         log.info("Bot connected as %s", client.user)
         log.info("Listening in channel: %s", ctx.channel_id)
-        log.info("Campaign: %s", config["campaign"])
+        log.info("Campaign: %s", campaign)
         log.info("Model: %s", model_label)
         log.info("Buffer size: %s messages", config["message_buffer_size"])
         ctx.main_channel = client.get_channel(ctx.channel_id)

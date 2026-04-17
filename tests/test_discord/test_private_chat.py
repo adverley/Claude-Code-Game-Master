@@ -1,6 +1,7 @@
 """Tests for discord_bot.private_chat."""
 
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from discord_bot.private_chat import PrivateChatManager
@@ -123,7 +124,8 @@ def _make_ctx(*, session_active=True, character="Thorin", discord_name="Player1"
     ctx.claude_bridge.send = AsyncMock(return_value=claude_response)
     ctx.claude_bridge.send_oneshot = AsyncMock(return_value=claude_response)
     ctx.main_channel = AsyncMock()
-    ctx.config = {"campaign": "test-campaign"}
+    ctx.config = {}
+    ctx.campaign_dir = Path("world-state/campaigns/test-campaign")
     ctx.claude_bridge._project_dir = "/fake/dir"
     return ctx
 

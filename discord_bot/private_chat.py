@@ -230,7 +230,7 @@ class PrivateChatManager:
         """Handle a DM when no session is active (lite mode)."""
         character_json, campaign_info = _load_lite_context(
             str(ctx.claude_bridge._project_dir),
-            ctx.config["campaign"],
+            ctx.campaign_dir.name,
             character,
         )
         prompt = self.build_lite_prompt(

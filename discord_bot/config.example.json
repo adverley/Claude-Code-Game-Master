@@ -1,6 +1,5 @@
 {
   "bot_token": "YOUR_BOT_TOKEN_HERE",
   "channel_id": "YOUR_CHANNEL_ID_HERE",
-  "campaign": "YOUR_CAMPAIGN_NAME",
   "message_buffer_size": 50
 }

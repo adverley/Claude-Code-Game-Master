@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-REQUIRED_FIELDS = ["bot_token", "channel_id", "campaign"]
+REQUIRED_FIELDS = ["bot_token", "channel_id"]
 DEFAULTS = {
     "message_buffer_size": 50,
     "dm_player": "",   # Discord display name allowed to use !dm. Empty = anyone.

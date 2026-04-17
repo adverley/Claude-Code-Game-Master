@@ -22,7 +22,8 @@ class FakeCtx:
         self.player_map = MagicMock()
         self.player_map.get_character.return_value = character
         self.player_map.get_discord_name.return_value = discord_name
-        self.config = {"campaign": "test-campaign"}
+        self.config = {}
+        self.campaign_dir = Path("world-state/campaigns/test-campaign")
         self.campaign_dir = None
 
 
