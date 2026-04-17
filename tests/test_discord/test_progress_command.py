@@ -247,3 +247,46 @@ class TestProgressCommand:
         await handle_progress(msg, "we move", ctx)
 
         assert ctx.progress_pending is False
+
+    async def test_check_closure_filters_correctly(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx()
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "DM", "character": "Thorin"},
+            "222": {"discord_name": "Player2", "character": "Elara"},
+        }
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        captured_check = None
+
+        async def capture_wait_for(event, *, check, timeout=None):
+            nonlocal captured_check
+            captured_check = check
+            raise asyncio.TimeoutError  # proceed immediately
+
+        ctx.client.wait_for = capture_wait_for
+
+        await handle_progress(msg, "we move", ctx)
+
+        assert captured_check is not None
+
+        # Valid: correct message, candidate user, confirm emoji
+        valid_reaction, valid_user = _make_reaction("✅", 999, "222")
+        assert captured_check(valid_reaction, valid_user) is True
+
+        # Wrong message ID
+        wrong_msg_reaction, _ = _make_reaction("✅", 888, "222")
+        assert captured_check(wrong_msg_reaction, valid_user) is False
+
+        # Non-candidate user
+        non_candidate_reaction, non_candidate_user = _make_reaction("✅", 999, "999")
+        assert captured_check(non_candidate_reaction, non_candidate_user) is False
+
+        # Wrong emoji
+        wrong_emoji_reaction, _ = _make_reaction("🎲", 999, "222")
+        assert captured_check(wrong_emoji_reaction, valid_user) is False

@@ -73,48 +73,49 @@ async def handle_progress(message, args: str, ctx) -> None:
     )
 
     ctx.progress_pending = True
-    confirm_msg = await message.channel.send(confirm_text)
     try:
-        await confirm_msg.add_reaction(_CONFIRM)
-        await confirm_msg.add_reaction(_DENY)
-    except Exception:
-        pass  # Missing reaction permissions; players can still react manually
-
-    confirmed: set[str] = set()
-    deadline = asyncio.get_event_loop().time() + timeout_sec
-
-    def check(reaction, user):
-        return (
-            reaction.message.id == confirm_msg.id
-            and str(user.id) in candidates
-            and str(reaction.emoji) in (_CONFIRM, _DENY)
-        )
-
-    aborted = False
-    while True:
-        remaining = deadline - asyncio.get_event_loop().time()
-        if remaining <= 0:
-            break
+        confirm_msg = await message.channel.send(confirm_text)
         try:
-            reaction, user = await asyncio.wait_for(
-                ctx.client.wait_for("reaction_add", check=check),
-                timeout=remaining,
-            )
-            uid = str(user.id)
-            if str(reaction.emoji) == _DENY:
-                denier = ctx.player_map.get_discord_name(uid) or user.display_name
-                await message.channel.send(
-                    f"{_DENY} **{denier}** denied the progress. Plot advancement aborted."
-                )
-                aborted = True
-                break
-            confirmed.add(uid)
-            if confirmed >= candidates:
-                break
-        except asyncio.TimeoutError:
-            break
+            await confirm_msg.add_reaction(_CONFIRM)
+            await confirm_msg.add_reaction(_DENY)
+        except Exception:
+            pass  # Missing reaction permissions; players can still react manually
 
-    ctx.progress_pending = False
+        confirmed: set[str] = set()
+        deadline = asyncio.get_running_loop().time() + timeout_sec
+
+        def check(reaction, user):
+            return (
+                reaction.message.id == confirm_msg.id
+                and str(user.id) in candidates
+                and str(reaction.emoji) in (_CONFIRM, _DENY)
+            )
+
+        aborted = False
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            try:
+                reaction, user = await asyncio.wait_for(
+                    ctx.client.wait_for("reaction_add", check=check),
+                    timeout=remaining,
+                )
+                uid = str(user.id)
+                if str(reaction.emoji) == _DENY:
+                    denier = ctx.player_map.get_discord_name(uid) or user.display_name
+                    await message.channel.send(
+                        f"{_DENY} **{denier}** denied the progress. Plot advancement aborted."
+                    )
+                    aborted = True
+                    break
+                confirmed.add(uid)
+                if confirmed >= candidates:
+                    break
+            except asyncio.TimeoutError:
+                break
+    finally:
+        ctx.progress_pending = False
 
     if not aborted:
         await _advance_plot(message, args, ctx)
