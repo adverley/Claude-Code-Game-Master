@@ -22,6 +22,7 @@ def make_ctx(channel_id=999):
     ctx.player_map.get_character.return_value = "thorin"
     ctx.player_map.get_discord_name.return_value = "Erik"
     ctx.message_buffer = MagicMock()
+    ctx.activity_tracker = MagicMock()
     return ctx
 
 
@@ -61,3 +62,35 @@ class TestOnMessageHandler:
 
         on_message_handler(msg, ctx)
         ctx.message_buffer.add.assert_not_called()
+
+
+class TestActivityRecording:
+    def test_records_activity_for_registered_player_chat(self):
+        ctx = make_ctx()
+        ctx.activity_tracker = MagicMock()
+        ctx.player_map.get_character.return_value = "thorin"
+        msg = FakeDiscordMessage("hello world", channel_id="999")
+
+        on_message_handler(msg, ctx)
+
+        ctx.activity_tracker.record.assert_called_once_with("111")
+
+    def test_records_activity_for_registered_player_command(self):
+        ctx = make_ctx()
+        ctx.activity_tracker = MagicMock()
+        ctx.player_map.get_character.return_value = "thorin"
+        msg = FakeDiscordMessage("!help", channel_id="999")
+
+        on_message_handler(msg, ctx)
+
+        ctx.activity_tracker.record.assert_called_once_with("111")
+
+    def test_does_not_record_for_unregistered_player(self):
+        ctx = make_ctx()
+        ctx.activity_tracker = MagicMock()
+        ctx.player_map.get_character.return_value = None
+        msg = FakeDiscordMessage("hello", channel_id="999")
+
+        on_message_handler(msg, ctx)
+
+        ctx.activity_tracker.record.assert_not_called()

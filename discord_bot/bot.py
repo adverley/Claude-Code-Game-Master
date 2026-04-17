@@ -5,7 +5,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import discord
 
@@ -15,6 +15,7 @@ from discord_bot.claude_bridge import ClaudeBridge
 from discord_bot.player_map import PlayerMap
 from discord_bot.commands import parse_command, COMMANDS
 from discord_bot.private_chat import PrivateChatManager
+from discord_bot.activity_tracker import ActivityTracker, Pace
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
@@ -94,6 +95,9 @@ class BotContext:
     client: discord.Client = None
     main_channel: discord.TextChannel = None
     private_chat_manager: PrivateChatManager = None
+    activity_tracker: ActivityTracker = field(default_factory=ActivityTracker)
+    pace: Pace = Pace.ACTIVE
+    progress_pending: bool = False
 
 
 def on_message_handler(message, ctx: BotContext) -> str:
@@ -112,7 +116,10 @@ def on_message_handler(message, ctx: BotContext) -> str:
         return "ignored"
 
     user_id = str(message.author.id)
-    character = ctx.player_map.get_character(user_id) or "unregistered"
+    character = ctx.player_map.get_character(user_id)
+    if character is not None:
+        ctx.activity_tracker.record(user_id)
+    character = character or "unregistered"
     discord_name = ctx.player_map.get_discord_name(user_id) or message.author.display_name
 
     parsed = parse_command(message.content)
