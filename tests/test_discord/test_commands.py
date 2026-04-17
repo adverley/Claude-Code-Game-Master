@@ -50,6 +50,11 @@ class TestParseCommand:
         result = parse_command("!foobar something")
         assert result is None
 
+    def test_parse_summary(self):
+        cmd, args = parse_command("!summary")
+        assert cmd == "summary"
+        assert args == ""
+
     def test_all_commands_registered(self):
-        expected = {"dm", "process", "roll", "inventory", "status", "session-start", "session-end", "join", "help", "overview", "save", "restore", "list-saves", "private", "done", "internal-reload"}
+        expected = {"dm", "process", "roll", "inventory", "status", "session-start", "session-end", "join", "help", "overview", "save", "restore", "list-saves", "private", "done", "internal-reload", "characters", "summary"}
         assert set(COMMANDS.keys()) == expected

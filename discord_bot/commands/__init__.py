@@ -30,4 +30,4 @@ def parse_command(content: str) -> Optional[tuple[str, str]]:
 
 
 # Import command modules to trigger registration
-from discord_bot.commands import dm, roll, inventory, status, session, join, help_cmd, overview, save, private, reload  # noqa: E402, F401
+from discord_bot.commands import dm, roll, inventory, status, session, join, help_cmd, overview, save, private, reload, characters, summary  # noqa: E402, F401
