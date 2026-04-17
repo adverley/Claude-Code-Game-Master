@@ -87,3 +87,163 @@ class TestPaceCommand:
 
         text = msg.channel.send.call_args[0][0]
         assert "async" in text.lower()
+
+
+def _make_reaction(emoji: str, msg_id: int, user_id: str):
+    reaction = MagicMock()
+    reaction.emoji = emoji
+    reaction.message = MagicMock()
+    reaction.message.id = msg_id
+    user = MagicMock()
+    user.id = user_id
+    return reaction, user
+
+
+@pytest.mark.asyncio
+class TestProgressCommand:
+    async def test_no_active_players_proceeds_without_confirmation(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx()
+        # Empty tracker — no other active players
+
+        await handle_progress(msg, "we enter the cave", ctx)
+
+        ctx.claude_bridge.send.assert_called_once()
+        ctx.client.wait_for.assert_not_called()
+
+    async def test_rejects_when_already_pending(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage()
+        ctx = FakeCtx()
+        ctx.progress_pending = True
+
+        await handle_progress(msg, "anything", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        text = msg.channel.send.call_args[0][0]
+        assert "pending" in text.lower()
+
+    async def test_rejects_unregistered_player(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage()
+        ctx = FakeCtx(character=None)
+
+        await handle_progress(msg, "we attack", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        text = msg.channel.send.call_args[0][0]
+        assert "!join" in text
+
+    async def test_rejects_when_no_active_session(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage()
+        ctx = FakeCtx()
+        ctx.claude_bridge.is_active = False
+
+        await handle_progress(msg, "we attack", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        text = msg.channel.send.call_args[0][0]
+        assert "session-start" in text
+
+    async def test_dm_player_guard_blocks_non_dm(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(display_name="RandomPlayer")
+        ctx = FakeCtx()
+        ctx.config = {"dm_player": "GameMaster"}
+
+        await handle_progress(msg, "advance", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        text = msg.channel.send.call_args[0][0]
+        assert "GameMaster" in text
+
+    async def test_all_active_players_confirm_advances_plot(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx()
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "DM", "character": "Thorin"},
+            "222": {"discord_name": "Player2", "character": "Elara"},
+        }
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        reaction, user = _make_reaction("✅", 999, "222")
+        ctx.client.wait_for = AsyncMock(return_value=(reaction, user))
+
+        await handle_progress(msg, "we move north", ctx)
+
+        ctx.claude_bridge.send.assert_called_once()
+        assert ctx.progress_pending is False
+
+    async def test_deny_aborts_and_posts_message(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx()
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "DM", "character": "Thorin"},
+            "222": {"discord_name": "Player2", "character": "Elara"},
+        }
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        reaction, user = _make_reaction("❌", 999, "222")
+        ctx.client.wait_for = AsyncMock(return_value=(reaction, user))
+
+        await handle_progress(msg, "we move north", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        assert ctx.progress_pending is False
+        texts = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert any("denied" in t.lower() or "aborted" in t.lower() for t in texts)
+
+    async def test_timeout_proceeds_without_full_confirmation(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx()
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "DM", "character": "Thorin"},
+            "222": {"discord_name": "Player2", "character": "Elara"},
+        }
+        ctx.activity_tracker.record("222")
+        ctx.pace = Pace.ACTIVE
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        ctx.client.wait_for = AsyncMock(side_effect=asyncio.TimeoutError)
+
+        await handle_progress(msg, "we move north", ctx)
+
+        ctx.claude_bridge.send.assert_called_once()
+        assert ctx.progress_pending is False
+
+    async def test_pending_flag_cleared_after_deny(self):
+        from discord_bot.commands.progress import handle_progress
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx()
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "DM", "character": "Thorin"},
+            "222": {"discord_name": "Player2", "character": "Elara"},
+        }
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        reaction, user = _make_reaction("❌", 999, "222")
+        ctx.client.wait_for = AsyncMock(return_value=(reaction, user))
+
+        await handle_progress(msg, "we move", ctx)
+
+        assert ctx.progress_pending is False
