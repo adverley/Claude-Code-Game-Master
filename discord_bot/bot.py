@@ -98,6 +98,7 @@ class BotContext:
     activity_tracker: ActivityTracker = field(default_factory=ActivityTracker)
     pace: Pace = Pace.ACTIVE
     progress_pending: bool = False
+    session_end_pending: bool = False
 
 
 def on_message_handler(message, ctx: BotContext) -> str:

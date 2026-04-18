@@ -78,3 +78,10 @@ class TestSessionEnd:
         ctx.claude_bridge.send.assert_not_called()
         sent = msg.channel.send.call_args[0][0]
         assert "no active session" in sent.lower() or "session-start" in sent.lower()
+
+    async def test_session_end_pending_flag_exists_on_ctx(self):
+        from discord_bot.bot import BotContext
+        from discord_bot.activity_tracker import ActivityTracker, Pace
+        from dataclasses import fields
+        field_names = {f.name for f in fields(BotContext)}
+        assert "session_end_pending" in field_names
