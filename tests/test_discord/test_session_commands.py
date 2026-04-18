@@ -5,8 +5,9 @@ from discord_bot.commands.session import handle_session_start, handle_session_en
 
 
 class FakeMessage:
-    def __init__(self):
+    def __init__(self, user_id="111"):
         self.author = MagicMock()
+        self.author.id = user_id
         self.author.display_name = "Erik"
         self.channel = MagicMock()
         self.channel.send = AsyncMock()
@@ -14,6 +15,7 @@ class FakeMessage:
 
 class FakeCtx:
     def __init__(self, active=False):
+        from discord_bot.activity_tracker import ActivityTracker, Pace
         self.claude_bridge = MagicMock()
         self.claude_bridge.is_active = active
         self.claude_bridge.start_session = MagicMock(return_value="discord-test-123")
@@ -31,6 +33,8 @@ class FakeCtx:
         mock_dm_user.send = AsyncMock()
         self.client = AsyncMock()
         self.client.fetch_user = AsyncMock(return_value=mock_dm_user)
+        self.activity_tracker = ActivityTracker()
+        self.session_end_pending = False
 
 
 @pytest.mark.asyncio
