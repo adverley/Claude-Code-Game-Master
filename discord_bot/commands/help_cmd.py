@@ -9,8 +9,7 @@ HELP_TEXT = """**D&D Discord Bot Commands:**
 
 **Gameplay:**
 `!dm <question>` -- Ask the DM a question (no plot advancement)
-`!process <action>` -- Tell the DM what you do (advances the story)
-`!progress <action>` -- Like `!process`, but asks active players to confirm first (✅/❌)
+`!process <action>` -- Tell the DM what you do (active players confirm with ✅/❌ first)
 `!private <question>` -- Ask the DM something privately (response via DM)
 `!roll <dice>` -- Roll dice (e.g. `!roll 1d20+5`, `!roll 3d6`)
 
