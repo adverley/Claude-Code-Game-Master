@@ -1,17 +1,12 @@
 """!dm and !process commands -- send prompts to Claude via the bridge."""
 
-import asyncio
 import logging
 import random
-from datetime import datetime, timedelta, timezone
 
 import discord
 from discord_bot.commands import register
+from discord_bot.commands.confirmation_gate import _CONFIRM, _DENY, get_active_candidates, run_confirmation_gate
 from discord_bot.response_router import route_response
-
-_CONFIRM = "✅"
-_DENY = "❌"
-_ACTIVITY_WINDOW = timedelta(minutes=15)
 
 DISCORD_MSG_LIMIT = 2000
 PRIVATE_WHISPER_CHANCE = 0.1  # 20% chance to inject a private whisper prompt
@@ -188,18 +183,15 @@ async def handle_process(message, args: str, ctx) -> None:
         return
 
     user_id = str(message.author.id)
-    cutoff = datetime.now(timezone.utc) - _ACTIVITY_WINDOW
-    active_ids = ctx.activity_tracker.active_since(cutoff)
-    registered = set(ctx.player_map.get_all().keys())
-    candidates = (active_ids & registered) - {user_id}
+    candidates = get_active_candidates(ctx, user_id)
 
     if not candidates:
         await _advance_plot(message, args, ctx)
         return
 
-    mentions = " ".join(f"<@{uid}>" for uid in candidates)
     timeout_sec = ctx.pace.value
     timeout_min = timeout_sec // 60
+    mentions = " ".join(f"<@{uid}>" for uid in candidates)
     confirm_text = (
         f"**{message.author.display_name}** wants to advance the plot:\n"
         f"> {args or '(no description)'}\n\n"
@@ -209,48 +201,12 @@ async def handle_process(message, args: str, ctx) -> None:
 
     ctx.progress_pending = True
     try:
-        confirm_msg = await message.channel.send(confirm_text)
-        try:
-            await confirm_msg.add_reaction(_CONFIRM)
-            await confirm_msg.add_reaction(_DENY)
-        except Exception:
-            pass
-
-        confirmed: set[str] = set()
-        deadline = asyncio.get_running_loop().time() + timeout_sec
-
-        def check(reaction, user):
-            return (
-                reaction.message.id == confirm_msg.id
-                and str(user.id) in candidates
-                and str(reaction.emoji) in (_CONFIRM, _DENY)
-            )
-
-        aborted = False
-        while True:
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                break
-            try:
-                reaction, user = await asyncio.wait_for(
-                    ctx.client.wait_for("reaction_add", check=check),
-                    timeout=remaining,
-                )
-                uid = str(user.id)
-                if str(reaction.emoji) == _DENY:
-                    denier = ctx.player_map.get_discord_name(uid) or user.display_name
-                    await message.channel.send(
-                        f"{_DENY} **{denier}** denied the progress. Plot advancement aborted."
-                    )
-                    aborted = True
-                    break
-                confirmed.add(uid)
-                if confirmed >= candidates:
-                    break
-            except asyncio.TimeoutError:
-                break
+        confirmed = await run_confirmation_gate(
+            message, ctx, confirm_text, candidates, timeout_sec,
+            require_all=True, action_name="plot advancement",
+        )
     finally:
         ctx.progress_pending = False
 
-    if not aborted:
+    if confirmed:
         await _advance_plot(message, args, ctx)
