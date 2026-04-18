@@ -10,6 +10,7 @@ HELP_TEXT = """**D&D Discord Bot Commands:**
 **Gameplay:**
 `!dm <question>` -- Ask the DM a question (no plot advancement)
 `!process <action>` -- Tell the DM what you do (advances the story)
+`!progress <action>` -- Like `!process`, but asks active players to confirm first (✅/❌)
 `!private <question>` -- Ask the DM something privately (response via DM)
 `!roll <dice>` -- Roll dice (e.g. `!roll 1d20+5`, `!roll 3d6`)
 
@@ -30,6 +31,7 @@ DM the bot directly to start a private conversation with the DM.
 **Session:**
 `!session-start` -- Start a new DM session
 `!session-end [summary]` -- End the current session
+`!pace [active|async]` -- Set confirmation timeout: `active` (2 min) or `async` (1 hour)
 
 `!help` -- Show this message
 """
