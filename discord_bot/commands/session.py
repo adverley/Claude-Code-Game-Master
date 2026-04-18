@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import shlex
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from discord_bot.commands import register
 from discord_bot.commands.dm import _dispatch_whispers
@@ -83,7 +83,7 @@ async def _end_session(message, summary: str, ctx) -> None:
             )
             await asyncio.wait_for(proc.communicate(), timeout=30.0)
         except Exception:
-            pass
+            pass  # Save failure is non-fatal; session still ends
         ctx.claude_bridge.end_session()
         await message.channel.send("*Session ended.*")
 
@@ -108,7 +108,6 @@ async def handle_session_end(message, args: str, ctx) -> None:
     summary = args.strip() if args.strip() else "Session ended by player request."
     log.info("!session-end from %s (%s): requested, summary=%r", discord_name, character, summary[:80])
 
-    from datetime import datetime, timezone
     cutoff = datetime.now(timezone.utc) - _ACTIVITY_WINDOW
     active_ids = ctx.activity_tracker.active_since(cutoff)
     registered = set(ctx.player_map.get_all().keys())
