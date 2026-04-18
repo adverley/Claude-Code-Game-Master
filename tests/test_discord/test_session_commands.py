@@ -113,6 +113,9 @@ class TestSessionEndGate:
 
         ctx.claude_bridge.send.assert_called_once()
         ctx.claude_bridge.end_session.assert_called_once()
+        # Gate was skipped — no confirmation message posted
+        texts = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert not any("react" in t.lower() or "confirm" in t.lower() for t in texts)
 
     async def test_rejects_when_already_pending(self):
         msg = FakeMessage(user_id="111")
@@ -238,3 +241,45 @@ class TestSessionEndGate:
         await handle_session_end(msg, "we won", ctx)
 
         assert ctx.session_end_pending is False
+
+    async def test_check_closure_filters_correctly(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "Erik", "character": "thorin"},
+            "222": {"discord_name": "Kira", "character": "elara"},
+        }
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        captured_check = None
+
+        async def capture_wait_for(event, *, check, timeout=None):
+            nonlocal captured_check
+            captured_check = check
+            raise asyncio.TimeoutError  # bail out immediately
+
+        ctx.client.wait_for = capture_wait_for
+
+        await handle_session_end(msg, "we won", ctx)
+
+        assert captured_check is not None
+
+        # Valid: correct message, candidate user, confirm emoji
+        valid_reaction, valid_user = _make_reaction("✅", 999, "222")
+        assert captured_check(valid_reaction, valid_user) is True
+
+        # Wrong message ID
+        wrong_msg_reaction, _ = _make_reaction("✅", 888, "222")
+        assert captured_check(wrong_msg_reaction, valid_user) is False
+
+        # Non-candidate user
+        non_candidate_reaction, non_candidate_user = _make_reaction("✅", 999, "999")
+        assert captured_check(non_candidate_reaction, non_candidate_user) is False
+
+        # Wrong emoji
+        wrong_emoji_reaction, _ = _make_reaction("🎲", 999, "222")
+        assert captured_check(wrong_emoji_reaction, valid_user) is False
