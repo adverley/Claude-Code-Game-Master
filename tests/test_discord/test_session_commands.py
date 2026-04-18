@@ -1,7 +1,18 @@
+import asyncio
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from discord_bot.commands.session import handle_session_start, handle_session_end
+
+
+def _make_reaction(emoji: str, msg_id: int, user_id: str):
+    reaction = MagicMock()
+    reaction.emoji = emoji
+    reaction.message = MagicMock()
+    reaction.message.id = msg_id
+    user = MagicMock()
+    user.id = user_id
+    return reaction, user
 
 
 class FakeMessage:
@@ -89,3 +100,141 @@ class TestSessionEnd:
         from dataclasses import fields
         field_names = {f.name for f in fields(BotContext)}
         assert "session_end_pending" in field_names
+
+
+@pytest.mark.asyncio
+class TestSessionEndGate:
+    async def test_no_other_active_players_ends_immediately(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        # No other players recorded in activity tracker
+
+        await handle_session_end(msg, "we won", ctx)
+
+        ctx.claude_bridge.send.assert_called_once()
+        ctx.claude_bridge.end_session.assert_called_once()
+
+    async def test_rejects_when_already_pending(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        ctx.session_end_pending = True
+
+        await handle_session_end(msg, "we won", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        text = msg.channel.send.call_args[0][0]
+        assert "pending" in text.lower()
+
+    async def test_majority_confirm_ends_session(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "Erik", "character": "thorin"},
+            "222": {"discord_name": "Kira", "character": "elara"},
+            "333": {"discord_name": "Brom", "character": "brom"},
+        }
+        ctx.activity_tracker.record("222")
+        ctx.activity_tracker.record("333")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        # "222" confirms — that's 1 out of 2 candidates = exactly 50%, not majority
+        # "333" also confirms — that's 2 out of 2 = majority
+        reactions = [
+            _make_reaction("✅", 999, "222"),
+            _make_reaction("✅", 999, "333"),
+        ]
+        ctx.client.wait_for = AsyncMock(side_effect=reactions)
+
+        await handle_session_end(msg, "we won", ctx)
+
+        ctx.claude_bridge.send.assert_called_once()
+        ctx.claude_bridge.end_session.assert_called_once()
+        assert ctx.session_end_pending is False
+
+    async def test_single_deny_aborts(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "Erik", "character": "thorin"},
+            "222": {"discord_name": "Kira", "character": "elara"},
+        }
+        ctx.player_map.get_discord_name.return_value = "Kira"
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        reaction, user = _make_reaction("❌", 999, "222")
+        ctx.client.wait_for = AsyncMock(return_value=(reaction, user))
+
+        await handle_session_end(msg, "we won", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        ctx.claude_bridge.end_session.assert_not_called()
+        assert ctx.session_end_pending is False
+        texts = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert any("denied" in t.lower() or "aborted" in t.lower() for t in texts)
+
+    async def test_timeout_without_majority_aborts(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "Erik", "character": "thorin"},
+            "222": {"discord_name": "Kira", "character": "elara"},
+            "333": {"discord_name": "Brom", "character": "brom"},
+        }
+        ctx.activity_tracker.record("222")
+        ctx.activity_tracker.record("333")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        # Only 1 of 2 confirms, then timeout — not a majority
+        reactions = [
+            _make_reaction("✅", 999, "222"),
+            asyncio.TimeoutError,
+        ]
+
+        call_count = 0
+        async def side_effect(*a, **kw):
+            nonlocal call_count
+            val = reactions[min(call_count, len(reactions) - 1)]
+            call_count += 1
+            if val is asyncio.TimeoutError:
+                raise asyncio.TimeoutError
+            return val
+
+        ctx.client.wait_for = side_effect
+
+        await handle_session_end(msg, "we won", ctx)
+
+        ctx.claude_bridge.send.assert_not_called()
+        assert ctx.session_end_pending is False
+        texts = [c[0][0] for c in msg.channel.send.call_args_list]
+        assert any("timed out" in t.lower() or "aborted" in t.lower() for t in texts)
+
+    async def test_pending_flag_cleared_after_deny(self):
+        msg = FakeMessage(user_id="111")
+        ctx = FakeCtx(active=True)
+        ctx.player_map.get_all.return_value = {
+            "111": {"discord_name": "Erik", "character": "thorin"},
+            "222": {"discord_name": "Kira", "character": "elara"},
+        }
+        ctx.player_map.get_discord_name.return_value = "Kira"
+        ctx.activity_tracker.record("222")
+
+        confirm_msg = AsyncMock()
+        confirm_msg.id = 999
+        msg.channel.send = AsyncMock(return_value=confirm_msg)
+
+        reaction, user = _make_reaction("❌", 999, "222")
+        ctx.client.wait_for = AsyncMock(return_value=(reaction, user))
+
+        await handle_session_end(msg, "we won", ctx)
+
+        assert ctx.session_end_pending is False
