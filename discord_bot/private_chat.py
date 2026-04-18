@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from discord_bot.commands import parse_command
+from discord_bot.commands import parse_command, COMMANDS
 from discord_bot.response_router import route_response
 
 log = logging.getLogger("dm_bot.private_chat")
@@ -122,6 +122,12 @@ class PrivateChatManager:
         """Main entry point for all Discord DMs from players."""
         user_id = str(message.author.id)
         content = message.content.strip()
+
+        # Allow !characters before the join check — unregistered players can browse the roster
+        parsed = parse_command(content)
+        if parsed is not None and parsed[0] == "characters":
+            await COMMANDS["characters"](message, parsed[1], ctx)
+            return
 
         character = ctx.player_map.get_character(user_id)
         if character is None:
