@@ -3,13 +3,13 @@
 import logging
 import random
 
-import discord
 from discord_bot.commands import register
+from discord_bot.commands._helpers import GateBusy, claim_gate, resolve_player, with_thinking
 from discord_bot.commands.confirmation_gate import _CONFIRM, _DENY, get_active_candidates, run_confirmation_gate
+from discord_bot.discord_utils import send_claude_reply
 from discord_bot.response_router import route_response
 
-DISCORD_MSG_LIMIT = 2000
-PRIVATE_WHISPER_CHANCE = 0.1  # 20% chance to inject a private whisper prompt
+PRIVATE_WHISPER_CHANCE = 0.1
 log = logging.getLogger("dm_bot.commands")
 
 
@@ -31,7 +31,6 @@ def _maybe_inject_private_prompt(payload: str, player_map, *, exclude_character:
         data["character"] for data in all_players.values()
         if data["character"] != exclude_character
     ]
-    # Fall back to full list if only one player
     if not candidates:
         candidates = [data["character"] for data in all_players.values()]
 
@@ -48,76 +47,36 @@ def _maybe_inject_private_prompt(payload: str, player_map, *, exclude_character:
     return payload
 
 
-async def _dispatch_whispers(whispers, player_map, client, channel) -> None:
-    """Send whisper DMs to players and post channel acknowledgements."""
-    for char_name, whisper_text in whispers:
-        user_id = player_map.get_user_id_by_character(char_name)
-        if user_id is None:
-            log.warning("No player mapped to character %r — skipping whisper", char_name)
-            continue
-        try:
-            user = await client.fetch_user(int(user_id))
-            for i in range(0, len(whisper_text), DISCORD_MSG_LIMIT):
-                await user.send(whisper_text[i:i + DISCORD_MSG_LIMIT])
-            await channel.send(f"🤫 *The DM whispers to {char_name}...*")
-        except discord.Forbidden:
-            log.warning("Cannot DM character %r — DMs disabled", char_name)
-            await channel.send(
-                f"{char_name}, your DMs are closed — enable them to receive private messages."
-            )
-
-
-async def _resolve_player(message, ctx):
-    """Return (discord_name, character) or send an error and return None."""
-    user_id = str(message.author.id)
-    character = ctx.player_map.get_character(user_id)
-    if character is None:
-        await message.channel.send("You're not registered. Use `!join <character_name>` first.")
-        return None
-    if not ctx.claude_bridge.is_active:
-        await message.channel.send("No active session. Use `!session-start` first.")
-        return None
-    discord_name = ctx.player_map.get_discord_name(user_id)
-    return discord_name, character
-
-
 @register("dm")
 async def handle_dm(message, args: str, ctx) -> None:
     """Handle !dm <text> -- ask the DM a question without advancing the plot."""
-    result = await _resolve_player(message, ctx)
-    if result is None:
+    player = await resolve_player(message, ctx, require_session=True)
+    if player is None:
         return
-    discord_name, character = result
 
-    log.info("!dm from %s (%s): %r", discord_name, character, args[:50] if args else "")
+    log.info("!dm from %s (%s): %r", player.discord_name, player.character, args[:50] if args else "")
 
     payload = ctx.message_buffer.format_for_claude(
         [],
-        active_player=discord_name,
-        active_character=character,
+        active_player=player.discord_name,
+        active_character=player.character,
         command_text=args,
         advance_plot=False,
     )
     log.debug("Payload built (%d chars), no buffer included", len(payload))
 
-    thinking_msg = await message.channel.send("*The DM is thinking...*")
-    try:
-        response = await ctx.claude_bridge.send(payload)
-        routed = route_response(response)
-
-        if routed.public:
-            for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
-                await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
-
-        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
-    except TimeoutError:
-        log.warning("Claude timed out for !dm from %s", discord_name)
-        await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
-    except RuntimeError as e:
-        log.error("Claude error for !dm from %s: %s", discord_name, e)
-        await message.channel.send(f"DM error: {e}")
-    finally:
-        await thinking_msg.delete()
+    async with with_thinking(message.channel):
+        try:
+            response = await ctx.claude_bridge.send(payload)
+            routed = route_response(response)
+            await send_claude_reply(routed, channel=message.channel,
+                                    player_map=ctx.player_map, client=ctx.client)
+        except TimeoutError:
+            log.warning("Claude timed out for !dm from %s", player.discord_name)
+            await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
+        except RuntimeError as e:
+            log.error("Claude error for !dm from %s: %s", player.discord_name, e)
+            await message.channel.send(f"DM error: {e}")
 
 
 async def _advance_plot(message, args: str, ctx) -> None:
@@ -143,24 +102,18 @@ async def _advance_plot(message, args: str, ctx) -> None:
     if private_notes:
         payload += "\n\n" + private_notes
 
-    thinking_msg = await message.channel.send("*The DM is thinking...*")
-    try:
-        response = await ctx.claude_bridge.send(payload)
-        routed = route_response(response)
-
-        if routed.public:
-            for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
-                await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
-
-        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
-    except TimeoutError:
-        log.warning("Claude timed out for plot advancement from %s", message.author.display_name)
-        await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
-    except RuntimeError as e:
-        log.error("Claude error for plot advancement from %s: %s", message.author.display_name, e)
-        await message.channel.send(f"DM error: {e}")
-    finally:
-        await thinking_msg.delete()
+    async with with_thinking(message.channel):
+        try:
+            response = await ctx.claude_bridge.send(payload)
+            routed = route_response(response)
+            await send_claude_reply(routed, channel=message.channel,
+                                    player_map=ctx.player_map, client=ctx.client)
+        except TimeoutError:
+            log.warning("Claude timed out for plot advancement from %s", message.author.display_name)
+            await message.channel.send("The DM took too long to respond. Try again or `!session-start` to restart.")
+        except RuntimeError as e:
+            log.error("Claude error for plot advancement from %s: %s", message.author.display_name, e)
+            await message.channel.send(f"DM error: {e}")
 
 
 @register("process")
@@ -172,41 +125,33 @@ async def handle_process(message, args: str, ctx) -> None:
         await message.channel.send(f"Only **{dm_player}** can advance the story with `!process`.")
         return
 
-    result = await _resolve_player(message, ctx)
-    if result is None:
+    player = await resolve_player(message, ctx, require_session=True)
+    if player is None:
         return
-    discord_name, character = result
-    log.info("!process from %s (%s): args=%r", discord_name, character, args[:50] if args else "")
+    log.info("!process from %s (%s): args=%r", player.discord_name, player.character, args[:50] if args else "")
 
-    if ctx.progress_pending:
-        await message.channel.send("A progress confirmation is already pending.")
-        return
-
-    user_id = str(message.author.id)
-    candidates = get_active_candidates(ctx, user_id)
-
-    if not candidates:
-        await _advance_plot(message, args, ctx)
-        return
-
-    timeout_sec = ctx.pace.value
-    timeout_min = timeout_sec // 60
-    mentions = " ".join(f"<@{uid}>" for uid in candidates)
-    confirm_text = (
-        f"**{message.author.display_name}** wants to advance the plot:\n"
-        f"> {args or '(no description)'}\n\n"
-        f"{mentions} — react {_CONFIRM} to confirm or {_DENY} to deny. "
-        f"Timeout in {timeout_min} minute{'s' if timeout_min != 1 else ''}."
-    )
-
-    ctx.progress_pending = True
     try:
-        confirmed = await run_confirmation_gate(
-            message, ctx, confirm_text, candidates, timeout_sec,
-            require_all=True, action_name="plot advancement",
-        )
-    finally:
-        ctx.progress_pending = False
+        async with claim_gate(ctx, "process"):
+            candidates = get_active_candidates(ctx, player.user_id)
+            if not candidates:
+                await _advance_plot(message, args, ctx)
+                return
 
-    if confirmed:
-        await _advance_plot(message, args, ctx)
+            timeout_sec = ctx.pace.value
+            timeout_min = timeout_sec // 60
+            mentions = " ".join(f"<@{uid}>" for uid in candidates)
+            confirm_text = (
+                f"**{message.author.display_name}** wants to advance the plot:\n"
+                f"> {args or '(no description)'}\n\n"
+                f"{mentions} — react {_CONFIRM} to confirm or {_DENY} to deny. "
+                f"Timeout in {timeout_min} minute{'s' if timeout_min != 1 else ''}."
+            )
+
+            confirmed = await run_confirmation_gate(
+                message, ctx, confirm_text, candidates, timeout_sec,
+                require_all=True, action_name="plot advancement",
+            )
+            if confirmed:
+                await _advance_plot(message, args, ctx)
+    except GateBusy:
+        await message.channel.send("A progress confirmation is already pending.")

@@ -2,19 +2,13 @@
 
 import json
 import logging
-import sys
-from pathlib import Path
+
+from multi_character import find_character_file
 
 from discord_bot.commands import register
 from discord_bot.player_map import PlayerMap
 
 log = logging.getLogger("dm_bot.commands")
-
-# Add multi-character module to path
-_MODULE_LIB = Path(__file__).resolve().parents[2] / ".claude" / "modules" / "multi-character" / "lib"
-sys.path.insert(0, str(_MODULE_LIB))
-
-from multi_character import find_character_file
 
 
 def _character_status(campaign_dir, character_name: str) -> str:

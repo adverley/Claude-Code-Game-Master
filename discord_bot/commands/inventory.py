@@ -1,19 +1,13 @@
 """!inventory command -- show player's inventory via inventory-system module."""
 
 import logging
-import sys
-from pathlib import Path
+
 from discord_bot.commands import register
-
-log = logging.getLogger("dm_bot.commands")
-
-# Add inventory-system module to path
-_MODULE_LIB = Path(__file__).resolve().parents[2] / ".claude" / "modules" / "inventory-system" / "lib"
-sys.path.insert(0, str(_MODULE_LIB))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
-
+from discord_bot.commands._helpers import resolve_player
 from inventory_manager import InventoryManager
 from player_manager import PlayerManager
+
+log = logging.getLogger("dm_bot.commands")
 
 
 def _format_inventory(char: dict) -> str:
@@ -38,8 +32,6 @@ def _format_inventory(char: dict) -> str:
     # Fall back to old equipment format if no inventory key
     if not inventory and "equipment" in char:
         equipment = char["equipment"]
-
-        # equipment can be a dict {weapons, armor, items} or a flat list
         if isinstance(equipment, dict):
             has_items = False
             for category, items in equipment.items():
@@ -56,13 +48,11 @@ def _format_inventory(char: dict) -> str:
             lines.append("\n*No items*")
         return "\n".join(lines)
 
-    # Stackable items
     if stackable:
         lines.append("\n**Stackable:**")
         for item, qty in sorted(stackable.items()):
             lines.append(f"  {item} — x{qty}")
 
-    # Unique items
     if unique:
         lines.append("\n**Unique:**")
         for item in unique:
@@ -71,7 +61,6 @@ def _format_inventory(char: dict) -> str:
     if not stackable and not unique:
         lines.append("\n*No items*")
 
-    # Custom stats
     custom_stats = char.get("custom_stats", {})
     if custom_stats:
         lines.append("\n**Stats:**")
@@ -86,26 +75,19 @@ def _format_inventory(char: dict) -> str:
 @register("inventory")
 async def handle_inventory(message, args: str, ctx) -> None:
     """Handle !inventory -- show the requesting player's inventory."""
-    user_id = str(message.author.id)
-    discord_name = message.author.display_name
-    character = ctx.player_map.get_character(user_id)
-
-    if character is None:
-        log.info("!inventory from %s (unregistered, user_id=%s): rejected", discord_name, user_id)
-        await message.channel.send("You're not registered. Use `!join <character_name>` first.")
+    player = await resolve_player(message, ctx)
+    if player is None:
         return
 
-    log.info("!inventory from %s (%s)", discord_name, character)
+    log.info("!inventory from %s (%s)", player.discord_name, player.character)
     try:
         mgr = PlayerManager("world-state", require_active_campaign=True)
         campaign_path = mgr.campaign_dir
-
-        # Resolve character file (supports both single character.json and legacy characters/ dir)
-        char_path = mgr._get_character_path(character)
+        char_path = mgr._get_character_path(player.character)
         char_file = str(char_path.relative_to(campaign_path))
 
         inv = InventoryManager(campaign_path, character_file=char_file)
         await message.channel.send(_format_inventory(inv.character))
     except (RuntimeError, FileNotFoundError) as e:
-        log.error("!inventory error for %s (%s): %s", discord_name, character, e)
+        log.error("!inventory error for %s (%s): %s", player.discord_name, player.character, e)
         await message.channel.send(f"Error: {e}")

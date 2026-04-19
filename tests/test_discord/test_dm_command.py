@@ -44,7 +44,7 @@ class FakeCtx:
         self.private_chat_manager = PrivateChatManager()
         self.activity_tracker = ActivityTracker()
         self.pace = Pace.ACTIVE
-        self.progress_pending = False
+        self.pending_gates = set()
 
 
 @pytest.mark.asyncio
@@ -382,7 +382,7 @@ class TestProcessConfirmation:
     async def test_rejects_when_already_pending(self):
         msg = FakeMessage()
         ctx = FakeCtx()
-        ctx.progress_pending = True
+        ctx.pending_gates.add("process")
 
         await handle_process(msg, "anything", ctx)
 
@@ -409,7 +409,7 @@ class TestProcessConfirmation:
         await handle_process(msg, "we move north", ctx)
 
         ctx.claude_bridge.send.assert_called_once()
-        assert ctx.progress_pending is False
+        assert "process" not in ctx.pending_gates
 
     async def test_deny_aborts_and_posts_message(self):
         msg = FakeMessage(user_id="111")
@@ -430,7 +430,7 @@ class TestProcessConfirmation:
         await handle_process(msg, "we move north", ctx)
 
         ctx.claude_bridge.send.assert_not_called()
-        assert ctx.progress_pending is False
+        assert "process" not in ctx.pending_gates
         texts = [c[0][0] for c in msg.channel.send.call_args_list]
         assert any("denied" in t.lower() or "aborted" in t.lower() for t in texts)
 
@@ -452,7 +452,7 @@ class TestProcessConfirmation:
         await handle_process(msg, "we move north", ctx)
 
         ctx.claude_bridge.send.assert_called_once()
-        assert ctx.progress_pending is False
+        assert "process" not in ctx.pending_gates
 
     async def test_check_closure_filters_correctly(self):
         msg = FakeMessage(user_id="111")

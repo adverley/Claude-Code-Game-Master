@@ -15,8 +15,12 @@ class ClaudeBridge:
         self._model = model.strip()
         self._claude_debug = claude_debug
         self.session_id: Optional[str] = None
-        self._session_started: bool = False
+        self._initialized: bool = False
         self._lock = asyncio.Lock()
+
+    @property
+    def project_dir(self) -> Path:
+        return self._project_dir
 
     @property
     def is_active(self) -> bool:
@@ -25,7 +29,7 @@ class ClaudeBridge:
     def start_session(self, campaign: str) -> str:
         """Start a new Claude Code session. Returns the session ID."""
         self.session_id = str(uuid.uuid4())
-        self._session_started = False
+        self._initialized = False
         model_label = self._model or "Claude Code default"
         log.info("Session created: %s (campaign: %s, model: %s)", self.session_id, campaign, model_label)
         return self.session_id
@@ -34,13 +38,13 @@ class ClaudeBridge:
         """End the current session."""
         log.info("Session ended: %s", self.session_id)
         self.session_id = None
-        self._session_started = False
+        self._initialized = False
 
     def _build_command(self, prompt: str) -> list[str]:
         """Build the claude CLI command list."""
         if not self.is_active:
             raise RuntimeError("No active session. Run !session-start first.")
-        if not self._session_started:
+        if not self._initialized:
             cmd = ["claude", "--print", "--session-id", self.session_id]
         else:
             cmd = ["claude", "--print", "--resume", self.session_id]
@@ -76,44 +80,49 @@ class ClaudeBridge:
             f"read and follow that instead."
         )
 
+    async def _run_subprocess(self, cmd: list[str], timeout: float, label: str) -> str:
+        """Spawn the claude CLI, wait for completion, decode. Raises TimeoutError or RuntimeError."""
+        log.debug("Claude %s command: %s", label, " ".join(cmd[:-1]))  # omit prompt from cmd log
+        log.debug("--- %s PROMPT START (%d chars) ---\n%s\n--- %s PROMPT END ---",
+                 label.upper(), len(cmd[-1]), cmd[-1], label.upper())
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(self._project_dir),
+        )
+        log.debug("Claude subprocess started (pid=%s, label=%s)", proc.pid, label)
+
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            log.error("Claude %s timed out after %.0fs (pid=%s)", label, timeout, proc.pid)
+            raise TimeoutError(f"Claude did not respond within {timeout}s")
+
+        stderr_text = stderr.decode().strip() if stderr else ""
+        if proc.returncode != 0:
+            log.error("Claude %s exited %d\nstderr: %s", label, proc.returncode, stderr_text)
+            raise RuntimeError(f"Claude exited with code {proc.returncode}: {stderr_text}")
+
+        if stderr_text:
+            log.debug("Claude %s stderr: %s", label, stderr_text)
+
+        response = stdout.decode().strip()
+        log.debug("--- %s RESPONSE START ---\n%s\n--- %s RESPONSE END ---",
+                 label.upper(), response, label.upper())
+        return response
+
     async def send(self, prompt: str, timeout: float = 120.0) -> str:
         """Send a prompt to the Claude session and return the response."""
         async with self._lock:
             cmd = self._build_command(prompt)
-            action = "init" if not self._session_started else "resume"
-            log.info("Claude %s [session=%s, timeout=%.0fs]", action, self.session_id[:8], timeout)
-            log.debug("Claude command: %s", " ".join(cmd[:-1]))  # omit prompt from cmd log
-            log.debug("--- PROMPT START (%d chars) ---\n%s\n--- PROMPT END ---", len(prompt), prompt)
-
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(self._project_dir),
-            )
-            log.debug("Claude subprocess started (pid=%s)", proc.pid)
-
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                log.error("Claude timed out after %.0fs (pid=%s)", timeout, proc.pid)
-                raise TimeoutError(f"Claude did not respond within {timeout}s")
-
-            stderr_text = stderr.decode().strip() if stderr else ""
-            if proc.returncode != 0:
-                log.error("Claude exited %d\nstderr: %s", proc.returncode, stderr_text)
-                raise RuntimeError(f"Claude exited with code {proc.returncode}: {stderr_text}")
-
-            if stderr_text:
-                log.debug("Claude stderr: %s", stderr_text)
-
-            response = stdout.decode().strip()
+            label = "init" if not self._initialized else "resume"
+            log.info("Claude %s [session=%s, timeout=%.0fs]", label, self.session_id[:8], timeout)
+            response = await self._run_subprocess(cmd, timeout, label)
             log.info("Claude responded (%d chars) [session=%s]", len(response), self.session_id[:8])
-            log.debug("--- RESPONSE START ---\n%s\n--- RESPONSE END ---", response)
-            self._session_started = True
+            self._initialized = True
             return response
 
     def _build_oneshot_command(self, prompt: str) -> list[str]:
@@ -128,36 +137,12 @@ class ClaudeBridge:
 
     async def send_oneshot(self, prompt: str, timeout: float = 60.0) -> str:
         """Run a single prompt without a session. For lite-mode queries."""
-        cmd = self._build_oneshot_command(prompt)
-        log.info("Claude oneshot [timeout=%.0fs]", timeout)
-        log.debug("Oneshot command: %s", " ".join(cmd[:-1]))
-        log.debug("--- ONESHOT PROMPT START (%d chars) ---\n%s\n--- ONESHOT PROMPT END ---", len(prompt), prompt)
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(self._project_dir),
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            log.error("Claude oneshot timed out after %.0fs", timeout)
-            raise TimeoutError(f"Claude did not respond within {timeout}s")
-
-        stderr_text = stderr.decode().strip() if stderr else ""
-        if proc.returncode != 0:
-            log.error("Claude oneshot exited %d\nstderr: %s", proc.returncode, stderr_text)
-            raise RuntimeError(f"Claude exited with code {proc.returncode}: {stderr_text}")
-
-        response = stdout.decode().strip()
-        log.info("Claude oneshot responded (%d chars)", len(response))
-        log.debug("--- ONESHOT RESPONSE START ---\n%s\n--- ONESHOT RESPONSE END ---", response)
-        return response
+        async with self._lock:
+            cmd = self._build_oneshot_command(prompt)
+            log.info("Claude oneshot [timeout=%.0fs]", timeout)
+            response = await self._run_subprocess(cmd, timeout, "oneshot")
+            log.info("Claude oneshot responded (%d chars)", len(response))
+            return response
 
     async def send_init(self, campaign: str, players: dict[str, dict], timeout: float = 180.0) -> str:
         """Initialize a new session with the DM prompt."""

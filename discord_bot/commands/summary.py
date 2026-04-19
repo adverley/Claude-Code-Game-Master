@@ -1,11 +1,11 @@
 """!summary command -- generate a brief story recap for the party."""
 
 import logging
-from discord_bot.commands import register
-from discord_bot.response_router import route_response
-from discord_bot.commands.dm import _dispatch_whispers
 
-DISCORD_MSG_LIMIT = 2000
+from discord_bot.commands import register
+from discord_bot.discord_utils import send_claude_reply
+from discord_bot.response_router import route_response
+
 log = logging.getLogger("dm_bot.commands")
 
 
@@ -34,12 +34,8 @@ async def handle_summary(message, args: str, ctx) -> None:
     try:
         response = await ctx.claude_bridge.send(prompt)
         routed = route_response(response)
-
-        if routed.public:
-            for i in range(0, len(routed.public), DISCORD_MSG_LIMIT):
-                await message.channel.send(routed.public[i:i + DISCORD_MSG_LIMIT])
-
-        await _dispatch_whispers(routed.whispers, ctx.player_map, ctx.client, message.channel)
+        await send_claude_reply(routed, channel=message.channel,
+                                player_map=ctx.player_map, client=ctx.client)
     except TimeoutError:
         log.warning("Claude timed out for !summary from %s", message.author.display_name)
         await message.channel.send("The DM took too long to respond. Try again.")

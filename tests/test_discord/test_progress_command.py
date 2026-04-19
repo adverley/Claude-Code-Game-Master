@@ -34,7 +34,7 @@ class FakeCtx:
         self.message_buffer.format_for_claude.return_value = "payload"
         self.activity_tracker = ActivityTracker()
         self.pace = Pace.ACTIVE
-        self.progress_pending = False
+        self.pending_gates = set()
         self.client = AsyncMock()
         self.private_chat_manager = MagicMock()
         self.private_chat_manager.build_process_notes.return_value = ""

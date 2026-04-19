@@ -5,10 +5,10 @@ import logging
 from pathlib import Path
 
 from discord_bot.commands import register
+from discord_bot.discord_utils import send_chunked
 
 log = logging.getLogger("dm_bot.commands")
 
-DISCORD_MSG_LIMIT = 2000
 STAT_ORDER = ["str", "dex", "con", "int", "wis", "cha"]
 STAT_LABELS = {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
 
@@ -74,6 +74,4 @@ async def handle_characters(message, args: str, ctx) -> None:
             block.append(f'*"{traits}"*')
         lines.append("\n".join(block))
 
-    output = "\n".join(lines)
-    for i in range(0, len(output), DISCORD_MSG_LIMIT):
-        await message.channel.send(output[i:i + DISCORD_MSG_LIMIT])
+    await send_chunked(message.channel, "\n".join(lines))

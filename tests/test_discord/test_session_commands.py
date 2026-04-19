@@ -45,7 +45,7 @@ class FakeCtx:
         self.client = AsyncMock()
         self.client.fetch_user = AsyncMock(return_value=mock_dm_user)
         self.activity_tracker = ActivityTracker()
-        self.session_end_pending = False
+        self.pending_gates = set()
 
 
 @pytest.mark.asyncio
@@ -94,12 +94,11 @@ class TestSessionEnd:
         sent = msg.channel.send.call_args[0][0]
         assert "no active session" in sent.lower() or "session-start" in sent.lower()
 
-    async def test_session_end_pending_flag_exists_on_ctx(self):
+    async def test_pending_gates_set_exists_on_ctx(self):
         from discord_bot.bot import BotContext
-        from discord_bot.activity_tracker import ActivityTracker, Pace
         from dataclasses import fields
         field_names = {f.name for f in fields(BotContext)}
-        assert "session_end_pending" in field_names
+        assert "pending_gates" in field_names
 
 
 @pytest.mark.asyncio
@@ -120,7 +119,7 @@ class TestSessionEndGate:
     async def test_rejects_when_already_pending(self):
         msg = FakeMessage(user_id="111")
         ctx = FakeCtx(active=True)
-        ctx.session_end_pending = True
+        ctx.pending_gates.add("session-end")
 
         await handle_session_end(msg, "we won", ctx)
 
@@ -155,7 +154,7 @@ class TestSessionEndGate:
 
         ctx.claude_bridge.send.assert_called_once()
         ctx.claude_bridge.end_session.assert_called_once()
-        assert ctx.session_end_pending is False
+        assert "session-end" not in ctx.pending_gates
 
     async def test_single_deny_aborts(self):
         msg = FakeMessage(user_id="111")
@@ -178,7 +177,7 @@ class TestSessionEndGate:
 
         ctx.claude_bridge.send.assert_not_called()
         ctx.claude_bridge.end_session.assert_not_called()
-        assert ctx.session_end_pending is False
+        assert "session-end" not in ctx.pending_gates
         texts = [c[0][0] for c in msg.channel.send.call_args_list]
         assert any("denied" in t.lower() or "aborted" in t.lower() for t in texts)
 
@@ -217,7 +216,7 @@ class TestSessionEndGate:
         await handle_session_end(msg, "we won", ctx)
 
         ctx.claude_bridge.send.assert_not_called()
-        assert ctx.session_end_pending is False
+        assert "session-end" not in ctx.pending_gates
         texts = [c[0][0] for c in msg.channel.send.call_args_list]
         assert any("timed out" in t.lower() or "aborted" in t.lower() for t in texts)
 
@@ -240,7 +239,7 @@ class TestSessionEndGate:
 
         await handle_session_end(msg, "we won", ctx)
 
-        assert ctx.session_end_pending is False
+        assert "session-end" not in ctx.pending_gates
 
     async def test_check_closure_filters_correctly(self):
         msg = FakeMessage(user_id="111")

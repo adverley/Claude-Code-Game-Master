@@ -1,16 +1,12 @@
 """!roll command -- dice rolling via lib/dice.py."""
 
 import logging
-import sys
-from pathlib import Path
+
+from dice import roll_detailed
+
 from discord_bot.commands import register
 
-# Add lib/ to path for dice import
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
-from dice import roll_detailed, DiceRoller
-
 log = logging.getLogger("dm_bot.commands")
-_roller = DiceRoller()
 
 
 @register("roll")
@@ -28,7 +24,6 @@ async def handle_roll(message, args: str, ctx) -> None:
     log.info("!roll from %s (%s): %s", discord_name, character, args.strip())
     try:
         result = roll_detailed(args.strip())
-        # Format without terminal color codes
         rolls_str = ", ".join(str(r) for r in result["rolls"])
         text = f"**{message.author.display_name}** rolls `{result['notation']}`: [{rolls_str}]"
 
